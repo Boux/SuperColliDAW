@@ -3,6 +3,7 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <dlfcn.h>
+#include <poll.h>
 
 #include <atomic>
 #include <chrono>
@@ -24,6 +25,14 @@ constexpr uint32_t kBlockFrames = 512;
 constexpr uint32_t kChannels = 2;
 
 std::set<clap_id> gTimers;
+std::set<int> gFds;
+int gFdCallbacks = 0;
+
+const clap_host_posix_fd_support kHostFdSupport = {
+    .register_fd = [](const clap_host*, int fd, clap_posix_fd_flags_t) { return gFds.insert(fd).second; },
+    .modify_fd = [](const clap_host*, int fd, clap_posix_fd_flags_t) { return gFds.count(fd) == 1; },
+    .unregister_fd = [](const clap_host*, int fd) { return gFds.erase(fd) == 1; },
+};
 
 const clap_host_timer_support kHostTimerSupport = {
     .register_timer = [](const clap_host*, uint32_t, clap_id* timerId) {
@@ -42,6 +51,8 @@ const clap_host kHost = {
     .url = "",
     .version = "0",
     .get_extension = [](const clap_host*, const char* id) -> const void* {
+        if (std::string(id) == CLAP_EXT_POSIX_FD_SUPPORT)
+            return &kHostFdSupport;
         return std::string(id) == CLAP_EXT_TIMER_SUPPORT ? &kHostTimerSupport : nullptr;
     },
     .request_restart = [](const clap_host*) {},
@@ -132,6 +143,7 @@ int main(int argc, char** argv) {
 
     auto* gui = static_cast<const clap_plugin_gui*>(plugin->get_extension(plugin, CLAP_EXT_GUI));
     auto* timer = static_cast<const clap_plugin_timer_support*>(plugin->get_extension(plugin, CLAP_EXT_TIMER_SUPPORT));
+    auto* fdSupport = static_cast<const clap_plugin_posix_fd_support*>(plugin->get_extension(plugin, CLAP_EXT_POSIX_FD_SUPPORT));
     if (!gui || !gui->create(plugin, CLAP_WINDOW_API_X11, false)) {
         std::fprintf(stderr, "plugin gui could not be created\n");
         return 1;
@@ -155,6 +167,13 @@ int main(int argc, char** argv) {
     while (std::chrono::steady_clock::now() < deadline) {
         for (clap_id id : std::set<clap_id>(gTimers))
             timer->on_timer(plugin, id);
+        for (int fd : std::set<int>(gFds)) {
+            pollfd request = { .fd = fd, .events = POLLIN, .revents = 0 };
+            if (poll(&request, 1, 0) > 0 && (request.revents & POLLIN)) {
+                fdSupport->on_fd(plugin, fd, CLAP_POSIX_FD_READ);
+                ++gFdCallbacks;
+            }
+        }
         while (XPending(display)) {
             XEvent event;
             XNextEvent(display, &event);
@@ -173,6 +192,7 @@ int main(int argc, char** argv) {
     entry->deinit();
     XDestroyWindow(display, parent);
     XCloseDisplay(display);
-    std::printf("gui ran for %.1f s at %ux%u, output peak %.3f, screenshot in %s\n", seconds, width, height, peak.load(), argv[3]);
+    std::printf("gui ran for %.1f s at %ux%u, output peak %.3f, %d fd callbacks, screenshot in %s\n", seconds, width, height, peak.load(),
+        gFdCallbacks, argv[3]);
     return 0;
 }

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <filesystem>
+#include <string>
 
 namespace supercollidaw {
 
-std::filesystem::path ensureDefaultCodeFile();
+std::string defaultCode();
 
 }

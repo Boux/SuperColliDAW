@@ -32,11 +32,16 @@ add_library(supercollidaw_clap MODULE
     plugin/Plugin.cpp
     plugin/PluginGui.cpp
     plugin/PluginPaths.cpp
+    plugin/code/CodeController.cpp
+    plugin/code/CodeDocument.cpp
     plugin/code/DefaultCode.cpp
+    plugin/code/FileDialog.cpp
     plugin/code/LinkedFile.cpp
+    plugin/state/ClapStreams.cpp
+    plugin/state/PluginState.cpp
 )
 embed_binary(supercollidaw_clap supercollidaw_default_scd ${CMAKE_SOURCE_DIR}/assets/default.scd)
-target_include_directories(supercollidaw_clap PRIVATE ${CMAKE_SOURCE_DIR}/third_party/clap/include)
+target_include_directories(supercollidaw_clap PRIVATE ${CMAKE_SOURCE_DIR}/third_party/clap/include ${CMAKE_SOURCE_DIR}/third_party/portable-file-dialogs)
 target_link_libraries(supercollidaw_clap PRIVATE supercollidaw_engine supercollidaw_lang supercollidaw_ui)
 set_target_properties(supercollidaw_clap PROPERTIES OUTPUT_NAME SuperColliDAW PREFIX "" SUFFIX ".clap")
 if(UNIX AND NOT APPLE)

@@ -14,13 +14,18 @@ class PluginGui {
 public:
     static const clap_plugin_gui kExtension;
 
-    PluginGui(const clap_host* host, const clap_host_timer_support* hostTimer, EditorActions actions, const PostLog& postLog);
+    static const clap_plugin_posix_fd_support kPosixFdExtension;
+
+    PluginGui(const clap_host* host, const clap_host_timer_support* hostTimer, const clap_host_posix_fd_support* hostFd, EditorActions actions,
+        const PostLog& postLog);
     ~PluginGui();
     PluginGui(const PluginGui&) = delete;
     PluginGui& operator=(const PluginGui&) = delete;
 
     bool onTimer(clap_id timerId);
+    void onFd(int fd);
     void setCode(const std::string& code) { mView.setCode(code); }
+    void setStatus(EditorStatus status) { mView.setStatus(std::move(status)); }
 
 private:
     static PluginGui& from(const clap_plugin* plugin);
@@ -33,10 +38,14 @@ private:
     bool setParent(const clap_window* window);
     bool show();
     bool hide();
+    void registerEventFd();
+    void unregisterEventFd();
 
     const clap_host* mHost;
     const clap_host_timer_support* mHostTimer;
+    const clap_host_posix_fd_support* mHostFd;
     clap_id mFrameTimer = CLAP_INVALID_ID;
+    int mEventFd = -1;
     uint32_t mWidth;
     uint32_t mHeight;
     double mScale = 1.0;

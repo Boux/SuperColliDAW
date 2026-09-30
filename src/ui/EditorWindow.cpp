@@ -4,10 +4,12 @@
 
 #include <dejavu.h>
 #include <imgui.h>
-#include <imgui_internal.h>
-#include <cstdio>
 #include <imgui_impl_opengl3.h>
 #include <pugl/gl.h>
+
+#if !defined(_WIN32) && !defined(__APPLE__)
+#    include <X11/XKBlib.h>
+#endif
 
 #include <algorithm>
 
@@ -28,6 +30,21 @@ private:
     ImGuiContext* mPrevious;
 };
 
+// TODO(macos, windows): read the system key repeat delay and rate there too; ImGui's defaults apply meanwhile.
+void useSystemKeyRepeat(PuglWorld* world, ImGuiIO& io) {
+#if !defined(_WIN32) && !defined(__APPLE__)
+    Display* display = static_cast<Display*>(puglGetNativeWorld(world));
+    // X11 repeats held keys as release+press pairs, which ImGui trickles over two frames each, so they lag behind.
+    XkbSetDetectableAutoRepeat(display, True, nullptr);
+    unsigned int delayMs = 0;
+    unsigned int intervalMs = 0;
+    if (!XkbGetAutoRepeatRate(display, XkbUseCoreKbd, &delayMs, &intervalMs))
+        return;
+    io.KeyRepeatDelay = delayMs / 1000.f;
+    io.KeyRepeatRate = intervalMs / 1000.f;
+#endif
+}
+
 void addCodeFont(ImGuiIO& io) { io.Fonts->AddFontFromMemoryCompressedTTF(dejavu, dejavuSize, kFontSize); }
 
 }
@@ -46,6 +63,7 @@ EditorWindow::EditorWindow(PuglNativeView parent, uint32_t width, uint32_t heigh
     setScale(scale);
 
     puglSetWorldString(mWorld, PUGL_CLASS_NAME, "SuperColliDAW");
+    useSystemKeyRepeat(mWorld, ImGui::GetIO());
     puglSetHandle(mView, this);
     puglSetEventFunc(mView, onEvent);
     puglSetBackend(mView, puglGlBackend());
@@ -85,7 +103,17 @@ void EditorWindow::hide() { puglHide(mView); }
 
 void EditorWindow::idle() {
     puglObscureView(mView);
-    puglUpdate(mWorld, 0.0);
+    processEvents();
+}
+
+void EditorWindow::processEvents() { puglUpdate(mWorld, 0.0); }
+
+int EditorWindow::eventFd() const {
+#if !defined(_WIN32) && !defined(__APPLE__)
+    return ConnectionNumber(static_cast<Display*>(puglGetNativeWorld(mWorld)));
+#else
+    return -1;
+#endif
 }
 
 PuglStatus EditorWindow::onEvent(PuglView* view, const PuglEvent* event) {
@@ -94,7 +122,6 @@ PuglStatus EditorWindow::onEvent(PuglView* view, const PuglEvent* event) {
 
 PuglStatus EditorWindow::handle(const PuglEvent& event) {
     ScopedImGuiContext context(mImGui);
-    if (event.type == PUGL_KEY_PRESS || event.type == PUGL_BUTTON_PRESS) fprintf(stderr, "DEBUG %s key=%x state=%x nav=%s active=%x\n", event.type == PUGL_KEY_PRESS ? "key" : "button", event.type == PUGL_KEY_PRESS ? event.key.key : 0, event.key.state, ImGui::GetCurrentContext()->NavWindow ? ImGui::GetCurrentContext()->NavWindow->Name : "-", ImGui::GetCurrentContext()->ActiveId);
     if (event.type == PUGL_REALIZE)
         return startRenderer();
     if (event.type == PUGL_UNREALIZE)

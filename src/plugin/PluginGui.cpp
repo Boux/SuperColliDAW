@@ -50,8 +50,13 @@ const clap_plugin_gui PluginGui::kExtension = {
     .hide = [](const clap_plugin* plugin) { return from(plugin).hide(); },
 };
 
-PluginGui::PluginGui(const clap_host* host, const clap_host_timer_support* hostTimer, EditorActions actions, const PostLog& postLog):
-    mHost(host), mHostTimer(hostTimer), mWidth(kDefaultWidth), mHeight(kDefaultHeight), mView(std::move(actions), postLog) {}
+const clap_plugin_posix_fd_support PluginGui::kPosixFdExtension = {
+    .on_fd = [](const clap_plugin* plugin, int fd, clap_posix_fd_flags_t) { from(plugin).onFd(fd); },
+};
+
+PluginGui::PluginGui(const clap_host* host, const clap_host_timer_support* hostTimer, const clap_host_posix_fd_support* hostFd,
+    EditorActions actions, const PostLog& postLog):
+    mHost(host), mHostTimer(hostTimer), mHostFd(hostFd), mWidth(kDefaultWidth), mHeight(kDefaultHeight), mView(std::move(actions), postLog) {}
 
 PluginGui::~PluginGui() { destroy(); }
 
@@ -64,6 +69,7 @@ bool PluginGui::create() {
 }
 
 void PluginGui::destroy() {
+    unregisterEventFd();
     mWindow.reset();
     if (mFrameTimer == CLAP_INVALID_ID)
         return;
@@ -95,10 +101,31 @@ bool PluginGui::setScale(double scale) {
 bool PluginGui::setParent(const clap_window* window) {
     const auto parent = static_cast<PuglNativeView>(window->x11);
     mWindow = std::make_unique<EditorWindow>(parent, mWidth, mHeight, mScale, [this] { mView.draw(); });
-    if (mWindow->isRealized())
-        return true;
-    mWindow.reset();
-    return false;
+    if (!mWindow->isRealized()) {
+        mWindow.reset();
+        return false;
+    }
+    registerEventFd();
+    return true;
+}
+
+void PluginGui::registerEventFd() {
+    const int fd = mWindow->eventFd();
+    if (fd < 0 || !mHostFd || !mHostFd->register_fd || !mHostFd->register_fd(mHost, fd, CLAP_POSIX_FD_READ))
+        return;
+    mEventFd = fd;
+}
+
+void PluginGui::unregisterEventFd() {
+    if (mEventFd < 0)
+        return;
+    mHostFd->unregister_fd(mHost, mEventFd);
+    mEventFd = -1;
+}
+
+void PluginGui::onFd(int fd) {
+    if (mWindow && fd == mEventFd)
+        mWindow->processEvents();
 }
 
 bool PluginGui::show() {

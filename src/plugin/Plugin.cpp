@@ -3,6 +3,7 @@
 #include "PluginPaths.h"
 #include "code/DefaultCode.h"
 #include "engine/InstalledSuperCollider.h"
+#include "state/ClapStreams.h"
 
 #include <cstdio>
 #include <cstring>
@@ -46,6 +47,11 @@ const clap_plugin_timer_support Plugin::kTimerSupport = {
     .on_timer = [](const clap_plugin* plugin, clap_id timerId) { from(plugin)->onTimer(timerId); },
 };
 
+const clap_plugin_state Plugin::kState = {
+    .save = [](const clap_plugin* plugin, const clap_ostream* stream) { return from(plugin)->saveState(stream); },
+    .load = [](const clap_plugin* plugin, const clap_istream* stream) { return from(plugin)->loadState(stream); },
+};
+
 Plugin::Plugin(const clap_host* host): mHost(host) {
     mClapPlugin.desc = &kDescriptor;
     mClapPlugin.plugin_data = this;
@@ -76,11 +82,13 @@ bool Plugin::init() {
     mHostTimer = static_cast<const clap_host_timer_support*>(mHost->get_extension(mHost, CLAP_EXT_TIMER_SUPPORT));
     if (mHostTimer && mHostTimer->register_timer)
         mHostTimer->register_timer(mHost, kCodePollIntervalMs, &mCodePollTimer);
+    mHostFd = static_cast<const clap_host_posix_fd_support*>(mHost->get_extension(mHost, CLAP_EXT_POSIX_FD_SUPPORT));
+    mHostState = static_cast<const clap_host_state*>(mHost->get_extension(mHost, CLAP_EXT_STATE));
     mOscPort = std::make_unique<OscPort>();
-    mLinkedFile = std::make_unique<LinkedFile>(ensureDefaultCodeFile());
-    mCode = mLinkedFile->read();
-    mGui = std::make_unique<PluginGui>(mHost, mHostTimer, editorActions(), mPostLog);
-    mGui->setCode(mCode);
+    mCode = std::make_unique<CodeController>(defaultCode(), codeHooks());
+    mGui = std::make_unique<PluginGui>(mHost, mHostTimer, mHostFd, editorActions(), mPostLog);
+    mGui->setCode(mCode->code());
+    mGui->setStatus(mCode->status());
     startSclang();
     return true;
 }
@@ -109,7 +117,7 @@ bool Plugin::activate(double sampleRate, uint32_t maxFrames) {
     mSilence.assign(maxFrames, 0.f);
     mEngine = std::move(engine);
     mOscPort->attach(mEngine.get());
-    runCode();
+    run(mCode->code());
     return true;
 }
 
@@ -121,16 +129,13 @@ void Plugin::deactivate() {
 void Plugin::onTimer(clap_id timerId) {
     if (mGui->onTimer(timerId))
         return;
-    if (timerId != mCodePollTimer || !mLinkedFile->changedSinceRead())
-        return;
-    mCode = mLinkedFile->read();
-    mGui->setCode(mCode);
-    runCode();
+    if (timerId == mCodePollTimer)
+        mCode->poll();
 }
 
-void Plugin::runCode() {
+void Plugin::run(const std::string& code) {
     if (mSclang && mEngine)
-        mSclang->run(mCode);
+        mSclang->run(code);
 }
 
 void Plugin::evaluate(const std::string& code) {
@@ -143,16 +148,39 @@ void Plugin::stopSound() {
         mSclang->stopSound();
 }
 
+void Plugin::markProjectDirty() {
+    if (mHostState && mHostState->mark_dirty)
+        mHostState->mark_dirty(mHost);
+}
+
+CodeController::Hooks Plugin::codeHooks() {
+    return {
+        .run = [this](const std::string& code) { run(code); },
+        .post = [this](const std::string& line) { post(line); },
+        .markProjectDirty = [this] { markProjectDirty(); },
+        .showCode = [this](const std::string& code) { mGui->setCode(code); },
+        .showStatus = [this](const EditorStatus& status) { mGui->setStatus(status); },
+    };
+}
+
 EditorActions Plugin::editorActions() {
     return {
-        .runAll = [this](const std::string& code) {
-            mCode = code;
-            runCode();
-        },
+        .runAll = [this](const std::string& code) { mCode->runAll(code); },
         .evaluate = [this](const std::string& code) { evaluate(code); },
         .stop = [this] { stopSound(); },
-        .codeChanged = [this](const std::string& code) { mCode = code; },
+        .codeChanged = [this](const std::string& code) { mCode->edit(code); },
+        .open = [this] { mCode->open(); },
+        .save = [this](const std::string& code) { mCode->save(code); },
+        .saveAs = [this](const std::string& code) { mCode->saveAs(code); },
+        .unlink = [this](const std::string& code) { mCode->unlink(code); },
     };
+}
+
+bool Plugin::saveState(const clap_ostream* stream) const { return writeAll(stream, mCode->saveState()); }
+
+bool Plugin::loadState(const clap_istream* stream) {
+    const std::optional<std::string> bytes = readAll(stream);
+    return bytes && mCode->loadState(*bytes);
 }
 
 clap_process_status Plugin::process(const clap_process* process) {
@@ -177,6 +205,10 @@ const void* Plugin::extension(const char* id) const {
         return &kTimerSupport;
     if (!std::strcmp(id, CLAP_EXT_GUI))
         return &PluginGui::kExtension;
+    if (!std::strcmp(id, CLAP_EXT_POSIX_FD_SUPPORT))
+        return &PluginGui::kPosixFdExtension;
+    if (!std::strcmp(id, CLAP_EXT_STATE))
+        return &kState;
     return nullptr;
 }
 

@@ -26,6 +26,8 @@ public:
     void show();
     void hide();
     void idle();
+    void processEvents();
+    int eventFd() const;
 
 private:
     static PuglStatus onEvent(PuglView* view, const PuglEvent* event);

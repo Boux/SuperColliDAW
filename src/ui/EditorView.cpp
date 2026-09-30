@@ -66,11 +66,40 @@ void EditorView::drawSplitter() {
 void EditorView::drawToolbar() {
     if (ImGui::Button("Run all"))
         mActions.runAll(mEditor.GetText());
+    ImGui::SetItemTooltip("Stop everything and run the whole code.\nCtrl+Enter evaluates the block or selection, Shift+Enter the line.");
     ImGui::SameLine();
     if (ImGui::Button("Stop"))
         mActions.stop();
+    ImGui::SetItemTooltip("Stop all sound (Ctrl+.)");
+    ImGui::SameLine(0.f, ImGui::GetStyle().ItemSpacing.x * 4.f);
+    drawFileButtons();
+    ImGui::SameLine(0.f, ImGui::GetStyle().ItemSpacing.x * 4.f);
+    drawStatus();
+}
+
+void EditorView::drawFileButtons() {
+    if (ImGui::Button("Open..."))
+        mActions.open();
+    ImGui::SetItemTooltip("Link this instance to a .scd file (Ctrl+O)");
     ImGui::SameLine();
-    ImGui::TextDisabled("Ctrl+Enter evaluate block   Shift+Enter evaluate line   Ctrl+. stop");
+    if (ImGui::Button("Save"))
+        mActions.save(mEditor.GetText());
+    ImGui::SetItemTooltip("Save the linked file (Ctrl+S)");
+    ImGui::SameLine();
+    if (ImGui::Button("Save as..."))
+        mActions.saveAs(mEditor.GetText());
+    ImGui::SetItemTooltip("Save to a new .scd file and link to it (Ctrl+Shift+S)");
+    if (!mStatus.linked)
+        return;
+    ImGui::SameLine();
+    if (ImGui::Button("Unlink"))
+        mActions.unlink(mEditor.GetText());
+    ImGui::SetItemTooltip("Keep the code in the project and stop following the file");
+}
+
+void EditorView::drawStatus() {
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextDisabled("%s%s", mStatus.source.c_str(), mStatus.dirty ? " (modified)" : "");
 }
 
 void EditorView::handleShortcuts() {
@@ -80,6 +109,12 @@ void EditorView::handleShortcuts() {
         mActions.evaluate(selectionOrLine());
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Period, kOverEditor))
         mActions.stop();
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, kOverEditor))
+        mActions.save(mEditor.GetText());
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, kOverEditor))
+        mActions.saveAs(mEditor.GetText());
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, kOverEditor))
+        mActions.open();
 }
 
 std::string EditorView::selectionOrRegion() const {

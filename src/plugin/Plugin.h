@@ -1,7 +1,7 @@
 #pragma once
 
 #include "PluginGui.h"
-#include "code/LinkedFile.h"
+#include "code/CodeController.h"
 #include "engine/Engine.h"
 #include "engine/OscPort.h"
 #include "lang/PostLog.h"
@@ -39,10 +39,14 @@ private:
     void onTimer(clap_id timerId);
 
     void startSclang();
-    void runCode();
+    void run(const std::string& code);
     void evaluate(const std::string& code);
     void stopSound();
+    void markProjectDirty();
+    CodeController::Hooks codeHooks();
     EditorActions editorActions();
+    bool saveState(const clap_ostream* stream) const;
+    bool loadState(const clap_istream* stream);
 
     static uint32_t audioPortCount(const clap_plugin* plugin, bool isInput);
     static bool audioPortInfo(const clap_plugin* plugin, uint32_t index, bool isInput, clap_audio_port_info* info);
@@ -51,17 +55,19 @@ private:
     static const clap_plugin_audio_ports kAudioPorts;
     static const clap_plugin_latency kLatency;
     static const clap_plugin_timer_support kTimerSupport;
+    static const clap_plugin_state kState;
 
     clap_plugin mClapPlugin;
     const clap_host* mHost;
     const clap_host_timer_support* mHostTimer = nullptr;
+    const clap_host_posix_fd_support* mHostFd = nullptr;
+    const clap_host_state* mHostState = nullptr;
     clap_id mCodePollTimer = CLAP_INVALID_ID;
     PostLog mPostLog;
     std::unique_ptr<OscPort> mOscPort;
     std::unique_ptr<SclangProcess> mSclang;
+    std::unique_ptr<CodeController> mCode;
     std::unique_ptr<PluginGui> mGui;
-    std::unique_ptr<LinkedFile> mLinkedFile;
-    std::string mCode;
     std::unique_ptr<Engine> mEngine;
     std::vector<float> mSilence;
 };

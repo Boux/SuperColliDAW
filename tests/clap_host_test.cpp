@@ -1,3 +1,5 @@
+#include "plugin/state/PluginState.h"
+
 #include <clap/clap.h>
 
 #include <dlfcn.h>
@@ -6,6 +8,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -24,8 +27,44 @@ constexpr auto kSclangStartTimeout = std::chrono::seconds(30);
 
 std::filesystem::path gCodeFile;
 
-void writeCode(double sineHz) {
-    std::ofstream(gCodeFile) << "{ SoundIn.ar([0, 1]) + SinOsc.ar(" << sineHz << ", 0, " << kTestSineAmp << ") }.play;\n";
+std::string sineCode(double sineHz) {
+    return "{ SoundIn.ar([0, 1]) + SinOsc.ar(" + std::to_string(sineHz) + ", 0, " + std::to_string(kTestSineAmp) + ") }.play;\n";
+}
+
+void writeCode(const std::filesystem::path& path, double sineHz) { std::ofstream(path) << sineCode(sineHz); }
+
+void writeCode(double sineHz) { writeCode(gCodeFile, sineHz); }
+
+const clap_ostream* appendingStream(std::string& bytes) {
+    static clap_ostream stream;
+    stream = {
+        .ctx = &bytes,
+        .write = [](const clap_ostream* s, const void* buffer, uint64_t size) -> int64_t {
+            static_cast<std::string*>(s->ctx)->append(static_cast<const char*>(buffer), size);
+            return static_cast<int64_t>(size);
+        },
+    };
+    return &stream;
+}
+
+struct ReadCursor {
+    const std::string& bytes;
+    size_t position = 0;
+};
+
+const clap_istream* readingStream(ReadCursor& cursor) {
+    static clap_istream stream;
+    stream = {
+        .ctx = &cursor,
+        .read = [](const clap_istream* s, void* buffer, uint64_t size) -> int64_t {
+            auto* c = static_cast<ReadCursor*>(s->ctx);
+            const size_t count = std::min<size_t>(size, c->bytes.size() - c->position);
+            std::memcpy(buffer, c->bytes.data() + c->position, count);
+            c->position += count;
+            return static_cast<int64_t>(count);
+        },
+    };
+    return &stream;
 }
 
 const clap_host_timer_support kHostTimerSupport = {
@@ -67,6 +106,13 @@ int gFailures = 0;
 void check(bool condition, const char* what) {
     std::printf("%s: %s\n", condition ? "PASS" : "FAIL", what);
     gFailures += condition ? 0 : 1;
+}
+
+double estimateFrequency(const std::vector<float>& signal, double sampleRate) {
+    int crossings = 0;
+    for (size_t i = 1; i < signal.size(); ++i)
+        crossings += (signal[i - 1] < 0.f && signal[i] >= 0.f) ? 1 : 0;
+    return crossings * sampleRate / signal.size();
 }
 
 class Instance {
@@ -112,6 +158,27 @@ public:
         return run(std::vector<float>(static_cast<size_t>(seconds * mSampleRate), 0.f), framesPerCall);
     }
 
+    std::string saveState() {
+        std::string bytes;
+        auto* state = static_cast<const clap_plugin_state*>(mPlugin->get_extension(mPlugin, CLAP_EXT_STATE));
+        state->save(mPlugin, appendingStream(bytes));
+        return bytes;
+    }
+
+    bool loadState(const std::string& bytes) {
+        ReadCursor cursor{ bytes };
+        auto* state = static_cast<const clap_plugin_state*>(mPlugin->get_extension(mPlugin, CLAP_EXT_STATE));
+        return state->load(mPlugin, readingStream(cursor));
+    }
+
+    double waitForFrequency(double expectedHz) {
+        double frequency = 0.0;
+        const auto deadline = std::chrono::steady_clock::now() + kSclangStartTimeout;
+        while (std::fabs(frequency - expectedHz) > 4.0 && std::chrono::steady_clock::now() < deadline)
+            frequency = estimateFrequency(runSilence(0.5, kMaxFrames), mSampleRate);
+        return frequency;
+    }
+
     void fireTimer() {
         auto* timer = static_cast<const clap_plugin_timer_support*>(mPlugin->get_extension(mPlugin, CLAP_EXT_TIMER_SUPPORT));
         timer->on_timer(mPlugin, kTimerId);
@@ -151,13 +218,6 @@ private:
     bool mActive = false;
 };
 
-double estimateFrequency(const std::vector<float>& signal, double sampleRate) {
-    int crossings = 0;
-    for (size_t i = 1; i < signal.size(); ++i)
-        crossings += (signal[i - 1] < 0.f && signal[i] >= 0.f) ? 1 : 0;
-    return crossings * sampleRate / signal.size();
-}
-
 void testSineFollowsHostSampleRate(const clap_plugin_factory* factory, double sampleRate) {
     Instance instance(factory, sampleRate);
     check(instance.active(), "plugin activates");
@@ -193,19 +253,35 @@ void testTwoInstancesRunTogether(const clap_plugin_factory* factory) {
     check(first.waitForSound() && second.waitForSound(), "both instances produce sound");
 }
 
-void testSavingTheCodeFileRerunsIt(const clap_plugin_factory* factory) {
+void testStateRestoresCode(const clap_plugin_factory* factory) {
+    std::string saved;
+    {
+        Instance original(factory, 48000.0);
+        original.waitForSound();
+        saved = original.saveState();
+    }
+    writeCode(880.0);
+    Instance restored(factory, 48000.0);
+    restored.waitForSound();
+    check(restored.loadState(saved), "the saved state loads into a new instance");
+    const double frequency = restored.waitForFrequency(kTestSineHz);
+    std::printf("  restored instance: frequency %.2f Hz\n", frequency);
+    check(std::fabs(frequency - kTestSineHz) <= 4.0, "a loaded state replaces the template code and runs it");
+    writeCode(kTestSineHz);
+}
+
+void testLinkedFileRerunsWhenSaved(const clap_plugin_factory* factory) {
+    const std::filesystem::path linked = gCodeFile.parent_path() / "linked.scd";
+    writeCode(linked, 660.0);
     Instance instance(factory, 48000.0);
     instance.waitForSound();
-    writeCode(880.0);
+    check(instance.loadState(supercollidaw::encodeState({ sineCode(660.0), linked.string() })), "a state linking a file loads");
+    std::printf("  linked file: frequency %.2f Hz\n", instance.waitForFrequency(660.0));
+    writeCode(linked, 880.0);
     instance.fireTimer();
-
-    double frequency = 0.0;
-    const auto deadline = std::chrono::steady_clock::now() + kSclangStartTimeout;
-    while (std::fabs(frequency - 880.0) > 4.0 && std::chrono::steady_clock::now() < deadline)
-        frequency = estimateFrequency(instance.runSilence(0.5, kMaxFrames), instance.sampleRate());
-    std::printf("  after saving: frequency %.2f Hz\n", frequency);
-    check(std::fabs(frequency - 880.0) <= 4.0, "saving the code file re-runs it");
-    writeCode(kTestSineHz);
+    const double frequency = instance.waitForFrequency(880.0);
+    std::printf("  after saving the linked file: frequency %.2f Hz\n", frequency);
+    check(std::fabs(frequency - 880.0) <= 4.0, "saving the linked file re-runs it");
 }
 
 }
@@ -233,7 +309,8 @@ int main(int argc, char** argv) {
     testSineFollowsHostSampleRate(factory, 44100.0);
     testTrackInputPassesThroughWithReportedLatency(factory);
     testTwoInstancesRunTogether(factory);
-    testSavingTheCodeFileRerunsIt(factory);
+    testStateRestoresCode(factory);
+    testLinkedFileRerunsWhenSaved(factory);
     entry->deinit();
 
     check(entry->init(argv[1]), "clap_entry initialises again after deinit");
