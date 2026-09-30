@@ -4,6 +4,7 @@
 
 #include <dlfcn.h>
 
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -75,6 +76,15 @@ const clap_host_timer_support kHostTimerSupport = {
     .unregister_timer = [](const clap_host*, clap_id) { return true; },
 };
 
+std::atomic<bool> gMainThreadCallbackRequested = false;
+int gParameterRescans = 0;
+
+const clap_host_params kHostParams = {
+    .rescan = [](const clap_host*, clap_param_rescan_flags) { ++gParameterRescans; },
+    .clear = [](const clap_host*, clap_id, clap_param_clear_flags) {},
+    .request_flush = [](const clap_host*) {},
+};
+
 const clap_host kHost = {
     .clap_version = CLAP_VERSION_INIT,
     .host_data = nullptr,
@@ -83,18 +93,44 @@ const clap_host kHost = {
     .url = "",
     .version = "0",
     .get_extension = [](const clap_host*, const char* id) -> const void* {
+        if (std::string(id) == CLAP_EXT_PARAMS)
+            return &kHostParams;
         return std::string(id) == CLAP_EXT_TIMER_SUPPORT ? &kHostTimerSupport : nullptr;
     },
     .request_restart = [](const clap_host*) {},
     .request_process = [](const clap_host*) {},
-    .request_callback = [](const clap_host*) {},
+    .request_callback = [](const clap_host*) { gMainThreadCallbackRequested = true; },
 };
 
-const clap_input_events kNoInputEvents = {
-    .ctx = nullptr,
-    .size = [](const clap_input_events*) -> uint32_t { return 0; },
-    .get = [](const clap_input_events*, uint32_t) -> const clap_event_header_t* { return nullptr; },
+struct ParameterEvents {
+    std::vector<clap_event_param_value> values;
+    std::vector<clap_event_param_mod> modulations;
+    std::vector<const clap_event_header*> headers;
+
+    const clap_input_events* list() {
+        headers.clear();
+        for (const auto& event : values)
+            headers.push_back(&event.header);
+        for (const auto& event : modulations)
+            headers.push_back(&event.header);
+        static clap_input_events events;
+        events = {
+            .ctx = this,
+            .size = [](const clap_input_events* e) { return static_cast<uint32_t>(static_cast<ParameterEvents*>(e->ctx)->headers.size()); },
+            .get = [](const clap_input_events* e, uint32_t index) { return static_cast<ParameterEvents*>(e->ctx)->headers[index]; },
+        };
+        return &events;
+    }
+
+    void clear() {
+        values.clear();
+        modulations.clear();
+    }
 };
+
+clap_event_header eventHeader(uint16_t type, uint32_t size) {
+    return { .size = size, .time = 0, .space_id = CLAP_CORE_EVENT_SPACE_ID, .type = type, .flags = 0 };
+}
 
 const clap_output_events kDiscardOutputEvents = {
     .ctx = nullptr,
@@ -133,12 +169,14 @@ public:
     }
 
     bool active() const { return mActive; }
+    const clap_plugin* clapPlugin() const { return mPlugin; }
 
     std::vector<float> run(const std::vector<float>& input, uint32_t framesPerCall) {
         std::vector<float> left(input.size()), right(input.size());
         for (size_t offset = 0; offset < input.size(); offset += framesPerCall) {
             const uint32_t frames = std::min<size_t>(framesPerCall, input.size() - offset);
             processCall(input.data() + offset, left.data() + offset, right.data() + offset, frames);
+            pumpMainThread();
         }
         return left;
     }
@@ -179,6 +217,37 @@ public:
         return frequency;
     }
 
+    void setParameter(clap_id id, double value) {
+        mEvents.values.push_back({ .header = eventHeader(CLAP_EVENT_PARAM_VALUE, sizeof(clap_event_param_value)), .param_id = id, .cookie = nullptr,
+            .note_id = -1, .port_index = -1, .channel = -1, .key = -1, .value = value });
+    }
+
+    void modulateParameter(clap_id id, double amount) {
+        mEvents.modulations.push_back({ .header = eventHeader(CLAP_EVENT_PARAM_MOD, sizeof(clap_event_param_mod)), .param_id = id, .cookie = nullptr,
+            .note_id = -1, .port_index = -1, .channel = -1, .key = -1, .amount = amount });
+    }
+
+    const clap_plugin_params* params() const {
+        return static_cast<const clap_plugin_params*>(mPlugin->get_extension(mPlugin, CLAP_EXT_PARAMS));
+    }
+
+    clap_param_info parameterInfo(uint32_t index) const {
+        clap_param_info info{};
+        params()->get_info(mPlugin, index, &info);
+        return info;
+    }
+
+    bool waitForParameter(uint32_t index, const char* name) {
+        const auto deadline = std::chrono::steady_clock::now() + kSclangStartTimeout;
+        while (std::chrono::steady_clock::now() < deadline) {
+            const clap_param_info info = parameterInfo(index);
+            if (!(info.flags & CLAP_PARAM_IS_HIDDEN) && std::string(info.name) == name)
+                return true;
+            runSilence(0.05, kMaxFrames);
+        }
+        return false;
+    }
+
     void fireTimer() {
         auto* timer = static_cast<const clap_plugin_timer_support*>(mPlugin->get_extension(mPlugin, CLAP_EXT_TIMER_SUPPORT));
         timer->on_timer(mPlugin, kTimerId);
@@ -194,6 +263,11 @@ public:
     double sampleRate() const { return mSampleRate; }
 
 private:
+    void pumpMainThread() {
+        if (gMainThreadCallbackRequested.exchange(false))
+            mPlugin->on_main_thread(mPlugin);
+    }
+
     void processCall(const float* in, float* outLeft, float* outRight, uint32_t frames) {
         float* inChannels[kChannels] = { const_cast<float*>(in), const_cast<float*>(in) };
         float* outChannels[kChannels] = { outLeft, outRight };
@@ -207,13 +281,15 @@ private:
             .audio_outputs = &output,
             .audio_inputs_count = 1,
             .audio_outputs_count = 1,
-            .in_events = &kNoInputEvents,
+            .in_events = mEvents.list(),
             .out_events = &kDiscardOutputEvents,
         };
         mPlugin->process(mPlugin, &process);
+        mEvents.clear();
     }
 
     double mSampleRate;
+    ParameterEvents mEvents;
     const clap_plugin* mPlugin = nullptr;
     bool mActive = false;
 };
@@ -284,6 +360,42 @@ void testLinkedFileRerunsWhenSaved(const clap_plugin_factory* factory) {
     check(std::fabs(frequency - 880.0) <= 4.0, "saving the linked file re-runs it");
 }
 
+void testParameters(const clap_plugin_factory* factory) {
+    const std::string code = "{ SinOsc.ar(SuperColliDAW.kr(0, \\pitch, [200, 800, \\exp]), 0, 0.1 * (1 - (In.kr(5) * 0.001))) }.play;\n";
+    Instance instance(factory, 48000.0);
+    instance.waitForSound();
+    instance.loadState(supercollidaw::encodeState({ code, "", {} }));
+    check(instance.waitForParameter(0, "pitch"), "SuperColliDAW.kr(0, \\pitch) shows parameter 0 named pitch");
+    check(instance.waitForParameter(5, "In.kr(5)"), "In.kr(5) shows parameter 5");
+    check(instance.parameterInfo(1).flags & CLAP_PARAM_IS_HIDDEN, "unused parameters stay hidden");
+    std::printf("  default: %.2f Hz\n", instance.waitForFrequency(200.0));
+
+    instance.setParameter(0, 1.0);
+    const double atMax = instance.waitForFrequency(800.0);
+    std::printf("  parameter at 1.0: %.2f Hz\n", atMax);
+    check(std::fabs(atMax - 800.0) <= 4.0, "a host value change reaches In.kr through the spec");
+
+    instance.modulateParameter(0, -0.5);
+    const double modulated = instance.waitForFrequency(400.0);
+    std::printf("  modulated by -0.5: %.2f Hz\n", modulated);
+    check(std::fabs(modulated - 400.0) <= 4.0, "host modulation offsets the value");
+
+    char text[64];
+    instance.params()->value_to_text(instance.clapPlugin(), 0, 0.5, text, sizeof(text));
+    double parsed = 0.0;
+    instance.params()->text_to_value(instance.clapPlugin(), 0, "400", &parsed);
+    std::printf("  0.5 displays as \"%s\", \"400\" parses to %.4f\n", text, parsed);
+    check(std::string(text) == "400" && std::fabs(parsed - 0.5) < 1e-9, "values display and parse in spec units");
+
+    const std::string saved = instance.saveState();
+    Instance restored(factory, 48000.0);
+    restored.loadState(saved);
+    double restoredValue = 0.0;
+    restored.params()->get_value(restored.clapPlugin(), 0, &restoredValue);
+    check(restoredValue == 1.0 && std::string(restored.parameterInfo(0).name) == "pitch", "parameter values and names are saved in the project");
+    check(gParameterRescans > 0, "the host is told to rescan parameters");
+}
+
 }
 
 int main(int argc, char** argv) {
@@ -311,6 +423,7 @@ int main(int argc, char** argv) {
     testTwoInstancesRunTogether(factory);
     testStateRestoresCode(factory);
     testLinkedFileRerunsWhenSaved(factory);
+    testParameters(factory);
     entry->deinit();
 
     check(entry->init(argv[1]), "clap_entry initialises again after deinit");

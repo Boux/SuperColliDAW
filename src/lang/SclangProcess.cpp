@@ -71,6 +71,7 @@ SclangProcess::SclangProcess(Config config): mConfig(std::move(config)), mStdout
         { "SUPERCOLLIDAW_SERVER_PORT", std::to_string(mConfig.serverPort) },
         { "SUPERCOLLIDAW_NUM_INPUTS", std::to_string(mConfig.numInputs) },
         { "SUPERCOLLIDAW_NUM_OUTPUTS", std::to_string(mConfig.numOutputs) },
+        { "SUPERCOLLIDAW_NUM_PARAMETERS", std::to_string(mConfig.numParameters) },
     });
     mProcess = std::make_unique<TinyProcessLib::Process>(
         arguments, std::string(), environment, [this](const char* bytes, size_t size) { mStdout.feed(bytes, size); },

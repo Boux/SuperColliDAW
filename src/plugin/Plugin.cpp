@@ -3,6 +3,8 @@
 #include "PluginPaths.h"
 #include "code/DefaultCode.h"
 #include "engine/InstalledSuperCollider.h"
+#include "params/ParameterEventReader.h"
+#include "params/ParameterExtension.h"
 #include "state/ClapStreams.h"
 
 #include <cstdio>
@@ -52,7 +54,7 @@ const clap_plugin_state Plugin::kState = {
     .load = [](const clap_plugin* plugin, const clap_istream* stream) { return from(plugin)->loadState(stream); },
 };
 
-Plugin::Plugin(const clap_host* host): mHost(host) {
+Plugin::Plugin(const clap_host* host): mHost(host), mWatcher([host] { host->request_callback(host); }) {
     mClapPlugin.desc = &kDescriptor;
     mClapPlugin.plugin_data = this;
     mClapPlugin.init = [](const clap_plugin* plugin) { return from(plugin)->init(); };
@@ -68,7 +70,7 @@ Plugin::Plugin(const clap_host* host): mHost(host) {
         return from(plugin)->process(process);
     };
     mClapPlugin.get_extension = [](const clap_plugin* plugin, const char* id) { return from(plugin)->extension(id); };
-    mClapPlugin.on_main_thread = [](const clap_plugin*) {};
+    mClapPlugin.on_main_thread = [](const clap_plugin* plugin) { from(plugin)->onMainThread(); };
 }
 
 Plugin* Plugin::from(const clap_plugin* plugin) { return static_cast<Plugin*>(plugin->plugin_data); }
@@ -84,7 +86,8 @@ bool Plugin::init() {
         mHostTimer->register_timer(mHost, kCodePollIntervalMs, &mCodePollTimer);
     mHostFd = static_cast<const clap_host_posix_fd_support*>(mHost->get_extension(mHost, CLAP_EXT_POSIX_FD_SUPPORT));
     mHostState = static_cast<const clap_host_state*>(mHost->get_extension(mHost, CLAP_EXT_STATE));
-    mOscPort = std::make_unique<OscPort>();
+    mHostParams = static_cast<const clap_host_params*>(mHost->get_extension(mHost, CLAP_EXT_PARAMS));
+    mOscPort = std::make_unique<OscPort>([this](std::string_view packet) { return mWatcher.observe(packet); });
     mCode = std::make_unique<CodeController>(defaultCode(), codeHooks());
     mGui = std::make_unique<PluginGui>(mHost, mHostTimer, mHostFd, editorActions(), mPostLog);
     mGui->setCode(mCode->code());
@@ -106,8 +109,8 @@ void Plugin::startSclang() {
         return;
     }
     const std::string classLibraryDir = (pluginResourcesDir() / "classes").string();
-    mSclang = std::make_unique<SclangProcess>(
-        SclangProcess::Config{ *executable, classLibraryDir, mOscPort->port(), kNumChannels, kNumChannels, [this](const std::string& line) { post(line); } });
+    mSclang = std::make_unique<SclangProcess>(SclangProcess::Config{ *executable, classLibraryDir, mOscPort->port(), kNumChannels,
+        kNumChannels, ParameterBank::kCount, [this](const std::string& line) { post(line); } });
 }
 
 bool Plugin::activate(double sampleRate, uint32_t maxFrames) {
@@ -129,13 +132,26 @@ void Plugin::deactivate() {
 void Plugin::onTimer(clap_id timerId) {
     if (mGui->onTimer(timerId))
         return;
-    if (timerId == mCodePollTimer)
-        mCode->poll();
+    if (timerId != mCodePollTimer)
+        return;
+    mCode->poll();
+    applyParameterEvents();
+}
+
+void Plugin::onMainThread() { applyParameterEvents(); }
+
+void Plugin::applyParameterEvents() {
+    const ParameterBank::Changes changes = mParameters.apply(mWatcher.takeEvents());
+    const clap_param_rescan_flags flags = (changes.info ? CLAP_PARAM_RESCAN_INFO | CLAP_PARAM_RESCAN_TEXT : 0) | (changes.values ? CLAP_PARAM_RESCAN_VALUES : 0);
+    if (flags && mHostParams && mHostParams->rescan)
+        mHostParams->rescan(mHost, flags);
 }
 
 void Plugin::run(const std::string& code) {
-    if (mSclang && mEngine)
-        mSclang->run(code);
+    if (!mSclang || !mEngine)
+        return;
+    mWatcher.reset();
+    mSclang->run(code);
 }
 
 void Plugin::evaluate(const std::string& code) {
@@ -176,11 +192,22 @@ EditorActions Plugin::editorActions() {
     };
 }
 
-bool Plugin::saveState(const clap_ostream* stream) const { return writeAll(stream, mCode->saveState()); }
+bool Plugin::saveState(const clap_ostream* stream) const {
+    PluginState state = mCode->state();
+    state.parameters = mParameters.state();
+    return writeAll(stream, encodeState(state));
+}
 
 bool Plugin::loadState(const clap_istream* stream) {
     const std::optional<std::string> bytes = readAll(stream);
-    return bytes && mCode->loadState(*bytes);
+    const std::optional<PluginState> state = bytes ? decodeState(*bytes) : std::nullopt;
+    if (!state)
+        return false;
+    mParameters.restore(state->parameters);
+    if (mHostParams && mHostParams->rescan)
+        mHostParams->rescan(mHost, CLAP_PARAM_RESCAN_VALUES | CLAP_PARAM_RESCAN_INFO | CLAP_PARAM_RESCAN_TEXT);
+    mCode->restore(*state);
+    return true;
 }
 
 clap_process_status Plugin::process(const clap_process* process) {
@@ -192,7 +219,9 @@ clap_process_status Plugin::process(const clap_process* process) {
         if (!outputs[ch])
             return CLAP_PROCESS_ERROR;
     }
-    mEngine->process(inputs, outputs, process->frames_count);
+    ParameterEventReader parameterEvents(mParameters, process->in_events);
+    mEngine->process(inputs, outputs, process->frames_count, parameterEvents);
+    parameterEvents.applyAll();
     return CLAP_PROCESS_CONTINUE;
 }
 
@@ -209,6 +238,8 @@ const void* Plugin::extension(const char* id) const {
         return &PluginGui::kPosixFdExtension;
     if (!std::strcmp(id, CLAP_EXT_STATE))
         return &kState;
+    if (!std::strcmp(id, CLAP_EXT_PARAMS))
+        return &kParameterExtension;
     return nullptr;
 }
 

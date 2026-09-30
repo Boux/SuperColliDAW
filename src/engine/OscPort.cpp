@@ -21,7 +21,7 @@ bool isCommand(const char* data, size_t size, const char* command) {
 
 }
 
-OscPort::OscPort(): mSocket(mIo, udp::endpoint(asio::ip::address_v4::loopback(), 0)) {
+OscPort::OscPort(Observer observer): mSocket(mIo, udp::endpoint(asio::ip::address_v4::loopback(), 0)), mObserver(std::move(observer)) {
     startReceive();
     mThread = std::thread([this] { mIo.run(); });
 }
@@ -47,6 +47,8 @@ void OscPort::startReceive() {
 }
 
 void OscPort::handlePacket(size_t size) {
+    if (mObserver(std::string_view(mBuffer.data(), size)))
+        return;
     if (isCommand(mBuffer.data(), size, "/quit")) {
         refuse("/quit", "the server lives inside the plugin and cannot be quit");
         return;

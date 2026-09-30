@@ -21,6 +21,7 @@ public:
         uint16_t serverPort;
         uint32_t numInputs;
         uint32_t numOutputs;
+        uint32_t numParameters;
         PostHandler onPost;
     };
 

@@ -29,10 +29,34 @@ SuperColliDAW {
 		if(server.serverRunning) { function.value } { server.doWhenBooted(function) };
 	}
 
+	*kr { |index, name, spec|
+		spec = this.prSpec(spec, name);
+		this.declare(index, name, spec);
+		^spec.map(In.kr(index))
+	}
+
+	*declare { |index, name, spec|
+		var warp;
+		spec = this.prSpec(spec, name);
+		warp = spec.warp.asSpecifier;
+		server.addr.sendMsg('/supercollidaw/param', index, name.asString, spec.minval, spec.maxval,
+			if(warp.isNumber) { "curve" } { warp.asString }, if(warp.isNumber) { warp } { 0 },
+			spec.step, spec.default, spec.units.asString);
+	}
+
+	*prSpec { |spec, name|
+		^(spec ? name.asSymbol).asSpec ?? { ControlSpec() }
+	}
+
 	*prServerOptions {
 		^ServerOptions.new
-			.numInputBusChannels_("SUPERCOLLIDAW_NUM_INPUTS".getenv.asInteger)
-			.numOutputBusChannels_("SUPERCOLLIDAW_NUM_OUTPUTS".getenv.asInteger)
+			.numInputBusChannels_(this.prEnvInteger("SUPERCOLLIDAW_NUM_INPUTS", 2))
+			.numOutputBusChannels_(this.prEnvInteger("SUPERCOLLIDAW_NUM_OUTPUTS", 2))
+			.reservedNumControlBusChannels_(this.prEnvInteger("SUPERCOLLIDAW_NUM_PARAMETERS", 0))
+	}
+
+	*prEnvInteger { |name, default|
+		^(name.getenv ? default).asInteger
 	}
 }
 

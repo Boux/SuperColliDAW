@@ -3,6 +3,7 @@ add_library(supercollidaw_engine OBJECT
     engine/InstalledSuperCollider.cpp
     engine/OscPort.cpp
     engine/SC_PluginDriver.cpp
+    engine/SynthDefControls.cpp
 )
 target_include_directories(supercollidaw_engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(supercollidaw_engine PUBLIC scsynth_embedded)
@@ -37,6 +38,11 @@ add_library(supercollidaw_clap MODULE
     plugin/code/DefaultCode.cpp
     plugin/code/FileDialog.cpp
     plugin/code/LinkedFile.cpp
+    plugin/params/ParameterBank.cpp
+    plugin/params/ParameterEventReader.cpp
+    plugin/params/ParameterExtension.cpp
+    plugin/params/ParameterSpec.cpp
+    plugin/params/ParameterWatcher.cpp
     plugin/state/ClapStreams.cpp
     plugin/state/PluginState.cpp
 )
@@ -47,7 +53,18 @@ set_target_properties(supercollidaw_clap PROPERTIES OUTPUT_NAME SuperColliDAW PR
 if(UNIX AND NOT APPLE)
     target_link_options(supercollidaw_clap PRIVATE -Wl,--no-undefined -Wl,--exclude-libs,ALL)
 endif()
-add_custom_command(TARGET supercollidaw_clap POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/sclang $<TARGET_FILE_DIR:supercollidaw_clap>/SuperColliDAW/classes
-    VERBATIM
-)
+file(GLOB SCLANG_CLASSES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/sclang/*.sc)
+set(SCLANG_CLASSES_DIR ${CMAKE_CURRENT_BINARY_DIR}/SuperColliDAW/classes)
+set(SCLANG_CLASS_COPIES)
+foreach(class ${SCLANG_CLASSES})
+    get_filename_component(name ${class} NAME)
+    add_custom_command(
+        OUTPUT ${SCLANG_CLASSES_DIR}/${name}
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${class} ${SCLANG_CLASSES_DIR}/${name}
+        DEPENDS ${class}
+        VERBATIM
+    )
+    list(APPEND SCLANG_CLASS_COPIES ${SCLANG_CLASSES_DIR}/${name})
+endforeach()
+add_custom_target(supercollidaw_sclang_classes ALL DEPENDS ${SCLANG_CLASS_COPIES})
+add_dependencies(supercollidaw_clap supercollidaw_sclang_classes)

@@ -57,18 +57,12 @@ void CodeController::poll() {
     pollLinkedFile();
 }
 
-std::string CodeController::saveState() const { return encodeState(mDocument.state()); }
-
-bool CodeController::loadState(std::string_view bytes) {
-    const std::optional<PluginState> state = decodeState(bytes);
-    if (!state)
-        return false;
-    if (!mDocument.restore(*state))
-        mHooks.post("SuperColliDAW: " + state->linkedPath + " could not be read. Using the copy saved in the project.");
+void CodeController::restore(const PluginState& state) {
+    if (!mDocument.restore(state))
+        mHooks.post("SuperColliDAW: " + state.linkedPath + " could not be read. Using the copy saved in the project.");
     mHooks.showCode(mDocument.text());
     mHooks.showStatus(status());
     mHooks.run(mDocument.text());
-    return true;
 }
 
 void CodeController::startDialog(FileDialog::Kind kind) {

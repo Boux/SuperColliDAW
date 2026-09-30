@@ -34,8 +34,8 @@ public:
     void unlink(const std::string& code);
     void poll();
 
-    std::string saveState() const;
-    bool loadState(std::string_view bytes);
+    PluginState state() const { return mDocument.state(); }
+    void restore(const PluginState& state);
 
 private:
     void startDialog(FileDialog::Kind kind);

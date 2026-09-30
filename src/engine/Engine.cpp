@@ -56,7 +56,7 @@ Engine::~Engine() {
         World_Cleanup(mWorld, false);
 }
 
-void Engine::process(const float* const* inputs, float* const* outputs, uint32_t numFrames) {
+void Engine::process(const float* const* inputs, float* const* outputs, uint32_t numFrames, ControlSource& controls) {
     mDriver->BeginCallback();
     for (uint32_t done = 0; done < numFrames;) {
         const uint32_t n = std::min(numFrames - done, kBlockSize - mStagePos);
@@ -65,6 +65,7 @@ void Engine::process(const float* const* inputs, float* const* outputs, uint32_t
         mStagePos += n;
         if (mStagePos < kBlockSize)
             continue;
+        controls.writeControls(done, mWorld->mControlBus, mWorld->mNumControlBusChannels);
         mDriver->RunBlock(mInStagePtrs.data(), mNumInputs, mOutStagePtrs.data(), mNumOutputs);
         mStagePos = 0;
     }

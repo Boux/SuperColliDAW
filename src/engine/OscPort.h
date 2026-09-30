@@ -4,9 +4,11 @@
 #include <boost/asio/ip/udp.hpp>
 
 #include <array>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <string_view>
 #include <thread>
 
 struct ReplyAddress;
@@ -17,7 +19,9 @@ class Engine;
 
 class OscPort {
 public:
-    OscPort();
+    using Observer = std::function<bool(std::string_view packet)>;
+
+    explicit OscPort(Observer observer);
     ~OscPort();
     OscPort(const OscPort&) = delete;
     OscPort& operator=(const OscPort&) = delete;
@@ -43,6 +47,7 @@ private:
     boost::asio::ip::udp::endpoint mSender;
     std::array<char, 65536> mBuffer;
     std::map<boost::asio::ip::udp::endpoint, std::unique_ptr<Client>> mClients;
+    Observer mObserver;
     std::mutex mEngineMutex;
     Engine* mEngine = nullptr;
     std::thread mThread;

@@ -6,6 +6,8 @@
 #include "engine/OscPort.h"
 #include "lang/PostLog.h"
 #include "lang/SclangProcess.h"
+#include "params/ParameterBank.h"
+#include "params/ParameterWatcher.h"
 
 #include <clap/clap.h>
 
@@ -23,6 +25,7 @@ public:
     explicit Plugin(const clap_host* host);
 
     static PluginGui& gui(const clap_plugin* plugin) { return *from(plugin)->mGui; }
+    static ParameterBank& parameters(const clap_plugin* plugin) { return from(plugin)->mParameters; }
 
     const clap_plugin* clapPlugin() const { return &mClapPlugin; }
 
@@ -37,6 +40,8 @@ private:
     clap_process_status process(const clap_process* process);
     const void* extension(const char* id) const;
     void onTimer(clap_id timerId);
+    void onMainThread();
+    void applyParameterEvents();
 
     void startSclang();
     void run(const std::string& code);
@@ -62,8 +67,11 @@ private:
     const clap_host_timer_support* mHostTimer = nullptr;
     const clap_host_posix_fd_support* mHostFd = nullptr;
     const clap_host_state* mHostState = nullptr;
+    const clap_host_params* mHostParams = nullptr;
     clap_id mCodePollTimer = CLAP_INVALID_ID;
     PostLog mPostLog;
+    ParameterBank mParameters;
+    ParameterWatcher mWatcher;
     std::unique_ptr<OscPort> mOscPort;
     std::unique_ptr<SclangProcess> mSclang;
     std::unique_ptr<CodeController> mCode;

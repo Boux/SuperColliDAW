@@ -11,6 +11,12 @@ class SC_PluginDriver;
 
 namespace supercollidaw {
 
+class ControlSource {
+public:
+    virtual ~ControlSource() = default;
+    virtual void writeControls(uint32_t frame, float* buses, uint32_t numBuses) = 0;
+};
+
 class Engine {
 public:
     static constexpr uint32_t kBlockSize = 64;
@@ -32,7 +38,7 @@ public:
 
     bool isRunning() const { return mWorld != nullptr; }
 
-    void process(const float* const* inputs, float* const* outputs, uint32_t numFrames);
+    void process(const float* const* inputs, float* const* outputs, uint32_t numFrames, ControlSource& controls);
     bool sendPacket(char* data, int size, ReplyFunc replyFunc, void* replyContext);
 
 private:
