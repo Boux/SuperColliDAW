@@ -1,8 +1,10 @@
 #include "Plugin.h"
 
-#include "TestSynth.h"
+#include "PluginPaths.h"
+#include "code/DefaultCode.h"
 #include "engine/InstalledSuperCollider.h"
 
+#include <cstdio>
 #include <cstring>
 
 namespace supercollidaw {
@@ -13,6 +15,7 @@ const char* const kFeatures[] = { CLAP_PLUGIN_FEATURE_AUDIO_EFFECT, CLAP_PLUGIN_
 
 constexpr clap_id kMainInputPortId = 0;
 constexpr clap_id kMainOutputPortId = 1;
+constexpr uint32_t kCodePollIntervalMs = 250;
 
 float* bufferChannel(const clap_audio_buffer* buffers, uint32_t count, uint32_t channel, float* fallback) {
     if (count == 0 || !buffers[0].data32 || channel >= buffers[0].channel_count)
@@ -39,11 +42,15 @@ const clap_plugin_audio_ports Plugin::kAudioPorts = { .count = audioPortCount, .
 
 const clap_plugin_latency Plugin::kLatency = { .get = latency };
 
+const clap_plugin_timer_support Plugin::kTimerSupport = {
+    .on_timer = [](const clap_plugin* plugin, clap_id timerId) { from(plugin)->onTimer(timerId); },
+};
+
 Plugin::Plugin(const clap_host* host): mHost(host) {
     mClapPlugin.desc = &kDescriptor;
     mClapPlugin.plugin_data = this;
-    mClapPlugin.init = [](const clap_plugin*) { return true; };
-    mClapPlugin.destroy = [](const clap_plugin* plugin) { delete from(plugin); };
+    mClapPlugin.init = [](const clap_plugin* plugin) { return from(plugin)->init(); };
+    mClapPlugin.destroy = [](const clap_plugin* plugin) { from(plugin)->destroy(); };
     mClapPlugin.activate = [](const clap_plugin* plugin, double sampleRate, uint32_t, uint32_t maxFrames) {
         return from(plugin)->activate(sampleRate, maxFrames);
     };
@@ -60,17 +67,61 @@ Plugin::Plugin(const clap_host* host): mHost(host) {
 
 Plugin* Plugin::from(const clap_plugin* plugin) { return static_cast<Plugin*>(plugin->plugin_data); }
 
+void Plugin::post(const std::string& line) { std::fprintf(stderr, "[SuperColliDAW] %s\n", line.c_str()); }
+
+bool Plugin::init() {
+    mHostTimer = static_cast<const clap_host_timer_support*>(mHost->get_extension(mHost, CLAP_EXT_TIMER_SUPPORT));
+    if (mHostTimer && mHostTimer->register_timer)
+        mHostTimer->register_timer(mHost, kCodePollIntervalMs, &mCodePollTimer);
+    mOscPort = std::make_unique<OscPort>();
+    mCode = std::make_unique<LinkedFile>(ensureDefaultCodeFile());
+    startSclang();
+    return true;
+}
+
+void Plugin::destroy() {
+    if (mCodePollTimer != CLAP_INVALID_ID)
+        mHostTimer->unregister_timer(mHost, mCodePollTimer);
+    delete this;
+}
+
+void Plugin::startSclang() {
+    const std::optional<std::string> executable = installedSclangPath();
+    if (!executable) {
+        post("sclang was not found. Install SuperCollider to run code.");
+        return;
+    }
+    const std::string classLibraryDir = (pluginResourcesDir() / "classes").string();
+    mSclang = std::make_unique<SclangProcess>(
+        SclangProcess::Config{ *executable, classLibraryDir, mOscPort->port(), kNumChannels, kNumChannels, post });
+}
+
 bool Plugin::activate(double sampleRate, uint32_t maxFrames) {
     auto engine = std::make_unique<Engine>(Engine::Config{ sampleRate, kNumChannels, kNumChannels, installedUGenPluginPath() });
     if (!engine->isRunning())
         return false;
-    startTestSynth(*engine);
     mSilence.assign(maxFrames, 0.f);
     mEngine = std::move(engine);
+    mOscPort->attach(mEngine.get());
+    runCode();
     return true;
 }
 
-void Plugin::deactivate() { mEngine.reset(); }
+void Plugin::deactivate() {
+    mOscPort->attach(nullptr);
+    mEngine.reset();
+}
+
+void Plugin::onTimer(clap_id timerId) {
+    if (timerId == mCodePollTimer && mCode->changedSinceRead())
+        runCode();
+}
+
+void Plugin::runCode() {
+    const std::string code = mCode->read();
+    if (mSclang && mEngine)
+        mSclang->run(code);
+}
 
 clap_process_status Plugin::process(const clap_process* process) {
     const float* inputs[kNumChannels];
@@ -90,6 +141,8 @@ const void* Plugin::extension(const char* id) const {
         return &kAudioPorts;
     if (!std::strcmp(id, CLAP_EXT_LATENCY))
         return &kLatency;
+    if (!std::strcmp(id, CLAP_EXT_TIMER_SUPPORT))
+        return &kTimerSupport;
     return nullptr;
 }
 

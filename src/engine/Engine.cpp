@@ -14,7 +14,8 @@ namespace supercollidaw {
 
 namespace {
 
-void discardReply(ReplyAddress*, char*, int) {}
+// sclang adopts the maxLogins the server reports and rejects anything above 32; 1 is its own default.
+constexpr uint32 kMaxLogins = 1;
 
 std::vector<float*> channelPointers(std::vector<float>& stage, uint32_t numChannels) {
     std::vector<float*> pointers(numChannels);
@@ -40,6 +41,7 @@ Engine::Engine(const Config& config):
     options.mBufLength = kBlockSize;
     options.mPreferredHardwareBufferFrameSize = kBlockSize;
     options.mPreferredSampleRate = static_cast<uint32>(std::lround(config.sampleRate));
+    options.mMaxLogins = kMaxLogins;
     options.mLoadGraphDefs = 0;
     options.mRendezvous = false;
     options.mUGensPluginPath = config.ugenPluginPath.c_str();
@@ -77,6 +79,8 @@ void Engine::exchange(const float* const* inputs, float* const* outputs, uint32_
         std::memcpy(outputs[ch] + offset, mOutStagePtrs[ch] + mStagePos, bytes);
 }
 
-bool Engine::sendPacket(char* data, int size) { return World_SendPacket(mWorld, size, data, discardReply); }
+bool Engine::sendPacket(char* data, int size, ReplyFunc replyFunc, void* replyContext) {
+    return World_SendPacketWithContext(mWorld, size, data, replyFunc, replyContext);
+}
 
 }

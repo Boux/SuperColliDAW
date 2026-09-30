@@ -5,6 +5,10 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -15,6 +19,22 @@ constexpr uint32_t kMaxFrames = 512;
 constexpr uint32_t kLatency = 64;
 constexpr double kTestSineHz = 440.0;
 constexpr float kTestSineAmp = 0.1f;
+constexpr clap_id kTimerId = 1;
+constexpr auto kSclangStartTimeout = std::chrono::seconds(30);
+
+std::filesystem::path gCodeFile;
+
+void writeCode(double sineHz) {
+    std::ofstream(gCodeFile) << "{ SoundIn.ar([0, 1]) + SinOsc.ar(" << sineHz << ", 0, " << kTestSineAmp << ") }.play;\n";
+}
+
+const clap_host_timer_support kHostTimerSupport = {
+    .register_timer = [](const clap_host*, uint32_t, clap_id* timerId) {
+        *timerId = kTimerId;
+        return true;
+    },
+    .unregister_timer = [](const clap_host*, clap_id) { return true; },
+};
 
 const clap_host kHost = {
     .clap_version = CLAP_VERSION_INIT,
@@ -23,7 +43,9 @@ const clap_host kHost = {
     .vendor = "",
     .url = "",
     .version = "0",
-    .get_extension = [](const clap_host*, const char*) -> const void* { return nullptr; },
+    .get_extension = [](const clap_host*, const char* id) -> const void* {
+        return std::string(id) == CLAP_EXT_TIMER_SUPPORT ? &kHostTimerSupport : nullptr;
+    },
     .request_restart = [](const clap_host*) {},
     .request_process = [](const clap_host*) {},
     .request_callback = [](const clap_host*) {},
@@ -77,13 +99,22 @@ public:
 
     bool waitForSound() {
         const std::vector<float> silence(kMaxFrames, 0.f);
-        for (int attempt = 0; attempt < 200; ++attempt) {
-            const std::vector<float> out = run(silence, kMaxFrames);
-            if (peak(out) > kTestSineAmp * 0.5f)
+        const auto deadline = std::chrono::steady_clock::now() + kSclangStartTimeout;
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (peak(run(silence, kMaxFrames)) > kTestSineAmp * 0.5f)
                 return true;
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         return false;
+    }
+
+    std::vector<float> runSilence(double seconds, uint32_t framesPerCall) {
+        return run(std::vector<float>(static_cast<size_t>(seconds * mSampleRate), 0.f), framesPerCall);
+    }
+
+    void fireTimer() {
+        auto* timer = static_cast<const clap_plugin_timer_support*>(mPlugin->get_extension(mPlugin, CLAP_EXT_TIMER_SUPPORT));
+        timer->on_timer(mPlugin, kTimerId);
     }
 
     static float peak(const std::vector<float>& signal) {
@@ -130,10 +161,9 @@ double estimateFrequency(const std::vector<float>& signal, double sampleRate) {
 void testSineFollowsHostSampleRate(const clap_plugin_factory* factory, double sampleRate) {
     Instance instance(factory, sampleRate);
     check(instance.active(), "plugin activates");
-    check(instance.waitForSound(), "test synth starts");
+    check(instance.waitForSound(), "sclang runs the code file and it makes sound");
 
-    const std::vector<float> silence(static_cast<size_t>(sampleRate), 0.f);
-    const std::vector<float> out = instance.run(silence, 100);
+    const std::vector<float> out = instance.runSilence(1.0, 100);
     const double frequency = estimateFrequency(out, sampleRate);
     std::printf("  sample rate %.0f: sine peak %.4f, frequency %.2f Hz\n", sampleRate, Instance::peak(out), frequency);
     check(std::fabs(Instance::peak(out) - kTestSineAmp) < 0.01f, "sine amplitude is 0.1");
@@ -163,6 +193,21 @@ void testTwoInstancesRunTogether(const clap_plugin_factory* factory) {
     check(first.waitForSound() && second.waitForSound(), "both instances produce sound");
 }
 
+void testSavingTheCodeFileRerunsIt(const clap_plugin_factory* factory) {
+    Instance instance(factory, 48000.0);
+    instance.waitForSound();
+    writeCode(880.0);
+    instance.fireTimer();
+
+    double frequency = 0.0;
+    const auto deadline = std::chrono::steady_clock::now() + kSclangStartTimeout;
+    while (std::fabs(frequency - 880.0) > 4.0 && std::chrono::steady_clock::now() < deadline)
+        frequency = estimateFrequency(instance.runSilence(0.5, kMaxFrames), instance.sampleRate());
+    std::printf("  after saving: frequency %.2f Hz\n", frequency);
+    check(std::fabs(frequency - 880.0) <= 4.0, "saving the code file re-runs it");
+    writeCode(kTestSineHz);
+}
+
 }
 
 int main(int argc, char** argv) {
@@ -175,6 +220,11 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "dlopen failed: %s\n", dlerror());
         return 2;
     }
+    char userDir[] = "/tmp/supercollidaw-test-XXXXXX";
+    setenv("SUPERCOLLIDAW_USER_DIR", mkdtemp(userDir), 1);
+    gCodeFile = std::filesystem::path(userDir) / "default.scd";
+    writeCode(kTestSineHz);
+
     auto* entry = static_cast<const clap_plugin_entry*>(dlsym(library, "clap_entry"));
     check(entry && entry->init(argv[1]), "clap_entry initialises");
     auto* factory = static_cast<const clap_plugin_factory*>(entry->get_factory(CLAP_PLUGIN_FACTORY_ID));
@@ -183,11 +233,13 @@ int main(int argc, char** argv) {
     testSineFollowsHostSampleRate(factory, 44100.0);
     testTrackInputPassesThroughWithReportedLatency(factory);
     testTwoInstancesRunTogether(factory);
+    testSavingTheCodeFileRerunsIt(factory);
     entry->deinit();
 
     check(entry->init(argv[1]), "clap_entry initialises again after deinit");
     testSineFollowsHostSampleRate(factory, 48000.0);
     entry->deinit();
+    std::filesystem::remove_all(userDir);
     std::printf("%d failure(s)\n", gFailures);
     return gFailures == 0 ? 0 : 1;
 }

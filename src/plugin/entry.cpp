@@ -1,4 +1,5 @@
 #include "Plugin.h"
+#include "PluginPaths.h"
 
 #include <cstring>
 #include <mutex>
@@ -11,9 +12,10 @@ using supercollidaw::Plugin;
 std::mutex gEntryMutex;
 int gEntryInitCount = 0;
 
-bool entryInit(const char*) {
+bool entryInit(const char* pluginPath) {
     std::lock_guard lock(gEntryMutex);
-    ++gEntryInitCount;
+    if (gEntryInitCount++ == 0)
+        supercollidaw::setPluginBinaryPath(pluginPath);
     return true;
 }
 

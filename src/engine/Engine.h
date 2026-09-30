@@ -1,5 +1,7 @@
 #pragma once
 
+#include "SC_Reply.h"
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -31,7 +33,7 @@ public:
     bool isRunning() const { return mWorld != nullptr; }
 
     void process(const float* const* inputs, float* const* outputs, uint32_t numFrames);
-    bool sendPacket(char* data, int size);
+    bool sendPacket(char* data, int size, ReplyFunc replyFunc, void* replyContext);
 
 private:
     void exchange(const float* const* inputs, float* const* outputs, uint32_t offset, uint32_t numFrames);
