@@ -15,6 +15,20 @@ SuperColliDAW {
 		server.doWhenBooted { code.interpret };
 	}
 
+	*evaluate { |code|
+		var function = code.compile;
+		if(function.isNil) { ^this };
+		this.prWhenRunning { ("-> " ++ function.value).postln };
+	}
+
+	*stop {
+		CmdPeriod.run;
+	}
+
+	*prWhenRunning { |function|
+		if(server.serverRunning) { function.value } { server.doWhenBooted(function) };
+	}
+
 	*prServerOptions {
 		^ServerOptions.new
 			.numInputBusChannels_("SUPERCOLLIDAW_NUM_INPUTS".getenv.asInteger)

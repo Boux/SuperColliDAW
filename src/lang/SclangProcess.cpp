@@ -77,21 +77,25 @@ SclangProcess::SclangProcess(Config config): mConfig(std::move(config)), mStdout
         [this](const char* bytes, size_t size) { mStderr.feed(bytes, size); }, true);
 }
 
-SclangProcess::~SclangProcess() { stop(); }
+SclangProcess::~SclangProcess() { shutdown(); }
 
 bool SclangProcess::isRunning() {
     int exitStatus;
     return mProcess->get_id() > 0 && !mProcess->try_get_exit_status(exitStatus);
 }
 
-void SclangProcess::run(const std::string& code) {
-    mProcess->write("SuperColliDAW.run(" + scStringLiteral(code) + ");" + kInterpretSilently);
-}
+void SclangProcess::run(const std::string& code) { send("SuperColliDAW.run(" + scStringLiteral(code) + ")"); }
 
-void SclangProcess::stop() {
+void SclangProcess::evaluate(const std::string& code) { send("SuperColliDAW.evaluate(" + scStringLiteral(code) + ")"); }
+
+void SclangProcess::stopSound() { send("SuperColliDAW.stop"); }
+
+void SclangProcess::send(const std::string& expression) { mProcess->write(expression + ";" + kInterpretSilently); }
+
+void SclangProcess::shutdown() {
     if (!isRunning())
         return;
-    mProcess->write(std::string("0.exit;") + kInterpretSilently);
+    send("0.exit");
     mProcess->close_stdin();
     const auto deadline = std::chrono::steady_clock::now() + kExitTimeout;
     while (isRunning() && std::chrono::steady_clock::now() < deadline)

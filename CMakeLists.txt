@@ -14,6 +14,7 @@ endif()
 
 include(cmake/scsynth.cmake)
 include(cmake/embed.cmake)
+include(cmake/ui.cmake)
 
 add_subdirectory(third_party/tiny-process-library EXCLUDE_FROM_ALL)
 

@@ -1,8 +1,10 @@
 #pragma once
 
+#include "PluginGui.h"
 #include "code/LinkedFile.h"
 #include "engine/Engine.h"
 #include "engine/OscPort.h"
+#include "lang/PostLog.h"
 #include "lang/SclangProcess.h"
 
 #include <clap/clap.h>
@@ -20,11 +22,13 @@ public:
 
     explicit Plugin(const clap_host* host);
 
+    static PluginGui& gui(const clap_plugin* plugin) { return *from(plugin)->mGui; }
+
     const clap_plugin* clapPlugin() const { return &mClapPlugin; }
 
 private:
     static Plugin* from(const clap_plugin* plugin);
-    static void post(const std::string& line);
+    void post(const std::string& line);
 
     bool init();
     void destroy();
@@ -36,6 +40,9 @@ private:
 
     void startSclang();
     void runCode();
+    void evaluate(const std::string& code);
+    void stopSound();
+    EditorActions editorActions();
 
     static uint32_t audioPortCount(const clap_plugin* plugin, bool isInput);
     static bool audioPortInfo(const clap_plugin* plugin, uint32_t index, bool isInput, clap_audio_port_info* info);
@@ -49,9 +56,12 @@ private:
     const clap_host* mHost;
     const clap_host_timer_support* mHostTimer = nullptr;
     clap_id mCodePollTimer = CLAP_INVALID_ID;
+    PostLog mPostLog;
     std::unique_ptr<OscPort> mOscPort;
     std::unique_ptr<SclangProcess> mSclang;
-    std::unique_ptr<LinkedFile> mCode;
+    std::unique_ptr<PluginGui> mGui;
+    std::unique_ptr<LinkedFile> mLinkedFile;
+    std::string mCode;
     std::unique_ptr<Engine> mEngine;
     std::vector<float> mSilence;
 };

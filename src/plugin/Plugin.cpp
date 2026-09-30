@@ -67,14 +67,20 @@ Plugin::Plugin(const clap_host* host): mHost(host) {
 
 Plugin* Plugin::from(const clap_plugin* plugin) { return static_cast<Plugin*>(plugin->plugin_data); }
 
-void Plugin::post(const std::string& line) { std::fprintf(stderr, "[SuperColliDAW] %s\n", line.c_str()); }
+void Plugin::post(const std::string& line) {
+    mPostLog.append(line);
+    std::fprintf(stderr, "[SuperColliDAW] %s\n", line.c_str());
+}
 
 bool Plugin::init() {
     mHostTimer = static_cast<const clap_host_timer_support*>(mHost->get_extension(mHost, CLAP_EXT_TIMER_SUPPORT));
     if (mHostTimer && mHostTimer->register_timer)
         mHostTimer->register_timer(mHost, kCodePollIntervalMs, &mCodePollTimer);
     mOscPort = std::make_unique<OscPort>();
-    mCode = std::make_unique<LinkedFile>(ensureDefaultCodeFile());
+    mLinkedFile = std::make_unique<LinkedFile>(ensureDefaultCodeFile());
+    mCode = mLinkedFile->read();
+    mGui = std::make_unique<PluginGui>(mHost, mHostTimer, editorActions(), mPostLog);
+    mGui->setCode(mCode);
     startSclang();
     return true;
 }
@@ -93,7 +99,7 @@ void Plugin::startSclang() {
     }
     const std::string classLibraryDir = (pluginResourcesDir() / "classes").string();
     mSclang = std::make_unique<SclangProcess>(
-        SclangProcess::Config{ *executable, classLibraryDir, mOscPort->port(), kNumChannels, kNumChannels, post });
+        SclangProcess::Config{ *executable, classLibraryDir, mOscPort->port(), kNumChannels, kNumChannels, [this](const std::string& line) { post(line); } });
 }
 
 bool Plugin::activate(double sampleRate, uint32_t maxFrames) {
@@ -113,14 +119,40 @@ void Plugin::deactivate() {
 }
 
 void Plugin::onTimer(clap_id timerId) {
-    if (timerId == mCodePollTimer && mCode->changedSinceRead())
-        runCode();
+    if (mGui->onTimer(timerId))
+        return;
+    if (timerId != mCodePollTimer || !mLinkedFile->changedSinceRead())
+        return;
+    mCode = mLinkedFile->read();
+    mGui->setCode(mCode);
+    runCode();
 }
 
 void Plugin::runCode() {
-    const std::string code = mCode->read();
     if (mSclang && mEngine)
-        mSclang->run(code);
+        mSclang->run(mCode);
+}
+
+void Plugin::evaluate(const std::string& code) {
+    if (mSclang && mEngine)
+        mSclang->evaluate(code);
+}
+
+void Plugin::stopSound() {
+    if (mSclang)
+        mSclang->stopSound();
+}
+
+EditorActions Plugin::editorActions() {
+    return {
+        .runAll = [this](const std::string& code) {
+            mCode = code;
+            runCode();
+        },
+        .evaluate = [this](const std::string& code) { evaluate(code); },
+        .stop = [this] { stopSound(); },
+        .codeChanged = [this](const std::string& code) { mCode = code; },
+    };
 }
 
 clap_process_status Plugin::process(const clap_process* process) {
@@ -143,6 +175,8 @@ const void* Plugin::extension(const char* id) const {
         return &kLatency;
     if (!std::strcmp(id, CLAP_EXT_TIMER_SUPPORT))
         return &kTimerSupport;
+    if (!std::strcmp(id, CLAP_EXT_GUI))
+        return &PluginGui::kExtension;
     return nullptr;
 }
 

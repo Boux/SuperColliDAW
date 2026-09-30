@@ -31,6 +31,8 @@ public:
 
     bool isRunning();
     void run(const std::string& code);
+    void evaluate(const std::string& code);
+    void stopSound();
 
 private:
     class LineBuffer {
@@ -43,7 +45,8 @@ private:
         std::string mPartial;
     };
 
-    void stop();
+    void send(const std::string& expression);
+    void shutdown();
 
     Config mConfig;
     LineBuffer mStdout;
