@@ -1,0 +1,5 @@
+add_executable(clap_host_test clap_host_test.cpp)
+target_include_directories(clap_host_test PRIVATE ${CMAKE_SOURCE_DIR}/third_party/clap/include)
+target_link_libraries(clap_host_test PRIVATE ${CMAKE_DL_LIBS})
+add_dependencies(clap_host_test supercollidaw_clap)
+add_test(NAME clap_host_test COMMAND clap_host_test $<TARGET_FILE:supercollidaw_clap>)

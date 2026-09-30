@@ -1,0 +1,50 @@
+#pragma once
+
+#include <cstdint>
+#include <string>
+#include <vector>
+
+struct World;
+class SC_PluginDriver;
+
+namespace supercollidaw {
+
+class Engine {
+public:
+    static constexpr uint32_t kBlockSize = 64;
+    static constexpr uint32_t kLatency = kBlockSize;
+
+    struct Config {
+        double sampleRate;
+        uint32_t numInputs;
+        uint32_t numOutputs;
+        std::string ugenPluginPath;
+    };
+
+    static void unloadPlugins();
+
+    explicit Engine(const Config& config);
+    ~Engine();
+    Engine(const Engine&) = delete;
+    Engine& operator=(const Engine&) = delete;
+
+    bool isRunning() const { return mWorld != nullptr; }
+
+    void process(const float* const* inputs, float* const* outputs, uint32_t numFrames);
+    bool sendPacket(char* data, int size);
+
+private:
+    void exchange(const float* const* inputs, float* const* outputs, uint32_t offset, uint32_t numFrames);
+
+    World* mWorld = nullptr;
+    SC_PluginDriver* mDriver = nullptr;
+    uint32_t mNumInputs;
+    uint32_t mNumOutputs;
+    std::vector<float> mInStage;
+    std::vector<float> mOutStage;
+    std::vector<float*> mInStagePtrs;
+    std::vector<float*> mOutStagePtrs;
+    uint32_t mStagePos = 0;
+};
+
+}

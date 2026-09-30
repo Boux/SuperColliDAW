@@ -1,0 +1,6 @@
+[submodule "third_party/supercollider"]
+	path = third_party/supercollider
+	url = https://github.com/supercollider/supercollider.git
+[submodule "third_party/clap"]
+	path = third_party/clap
+	url = https://github.com/free-audio/clap.git
