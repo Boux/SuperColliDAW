@@ -18,6 +18,7 @@ const char* const kFeatures[] = { CLAP_PLUGIN_FEATURE_AUDIO_EFFECT, CLAP_PLUGIN_
 
 constexpr clap_id kMainInputPortId = 0;
 constexpr clap_id kMainOutputPortId = 1;
+constexpr clap_id kNoteInputPortId = 0;
 constexpr uint32_t kCodePollIntervalMs = 250;
 
 float* bufferChannel(const clap_audio_buffer* buffers, uint32_t count, uint32_t channel, float* fallback) {
@@ -42,6 +43,8 @@ const clap_plugin_descriptor Plugin::kDescriptor = {
 };
 
 const clap_plugin_audio_ports Plugin::kAudioPorts = { .count = audioPortCount, .get = audioPortInfo };
+
+const clap_plugin_note_ports Plugin::kNotePorts = { .count = notePortCount, .get = notePortInfo };
 
 const clap_plugin_latency Plugin::kLatency = { .get = latency };
 
@@ -88,6 +91,7 @@ bool Plugin::init() {
     mHostState = static_cast<const clap_host_state*>(mHost->get_extension(mHost, CLAP_EXT_STATE));
     mHostParams = static_cast<const clap_host_params*>(mHost->get_extension(mHost, CLAP_EXT_PARAMS));
     mOscPort = std::make_unique<OscPort>([this](std::string_view packet) { return mWatcher.observe(packet); });
+    mMidi = std::make_unique<MidiForwarder>();
     mCode = std::make_unique<CodeController>(defaultCode(), codeHooks());
     mGui = std::make_unique<PluginGui>(mHost, mHostTimer, mHostFd, editorActions(), mPostLog);
     mGui->setCode(mCode->code());
@@ -111,6 +115,12 @@ void Plugin::startSclang() {
     const std::string classLibraryDir = (pluginResourcesDir() / "classes").string();
     mSclang = std::make_unique<SclangProcess>(SclangProcess::Config{ *executable, classLibraryDir, mOscPort->port(), kNumChannels,
         kNumChannels, ParameterBank::kCount, [this](const std::string& line) { post(line); } });
+    mMidi->setSclangPort(mSclang->langPort());
+}
+
+void Plugin::stopSclang() {
+    mMidi->setSclangPort(0);
+    mSclang.reset();
 }
 
 bool Plugin::activate(double sampleRate, uint32_t maxFrames) {
@@ -158,11 +168,11 @@ void Plugin::pollSclang() {
     if (!exitStatus)
         return;
     post("sclang exited with code " + std::to_string(*exitStatus) + ". Reboot the interpreter to run code again.");
-    mSclang.reset();
+    stopSclang();
 }
 
 void Plugin::rebootInterpreter() {
-    mSclang.reset();
+    stopSclang();
     startSclang();
     if (mEngine)
         mHost->request_restart(mHost);
@@ -241,6 +251,7 @@ clap_process_status Plugin::process(const clap_process* process) {
         if (!outputs[ch])
             return CLAP_PROCESS_ERROR;
     }
+    mMidi->forward(process->in_events);
     ParameterEventReader parameterEvents(mParameters, process->in_events);
     mEngine->process(inputs, outputs, process->frames_count, parameterEvents);
     parameterEvents.applyAll();
@@ -250,6 +261,8 @@ clap_process_status Plugin::process(const clap_process* process) {
 const void* Plugin::extension(const char* id) const {
     if (!std::strcmp(id, CLAP_EXT_AUDIO_PORTS))
         return &kAudioPorts;
+    if (!std::strcmp(id, CLAP_EXT_NOTE_PORTS))
+        return &kNotePorts;
     if (!std::strcmp(id, CLAP_EXT_LATENCY))
         return &kLatency;
     if (!std::strcmp(id, CLAP_EXT_TIMER_SUPPORT))
@@ -276,6 +289,18 @@ bool Plugin::audioPortInfo(const clap_plugin*, uint32_t index, bool isInput, cla
     info->channel_count = kNumChannels;
     info->port_type = CLAP_PORT_STEREO;
     info->in_place_pair = isInput ? kMainOutputPortId : kMainInputPortId;
+    return true;
+}
+
+uint32_t Plugin::notePortCount(const clap_plugin*, bool isInput) { return isInput ? 1 : 0; }
+
+bool Plugin::notePortInfo(const clap_plugin*, uint32_t index, bool isInput, clap_note_port_info* info) {
+    if (index != 0 || !isInput)
+        return false;
+    info->id = kNoteInputPortId;
+    info->supported_dialects = CLAP_NOTE_DIALECT_MIDI;
+    info->preferred_dialect = CLAP_NOTE_DIALECT_MIDI;
+    std::strncpy(info->name, "MIDI In", CLAP_NAME_SIZE);
     return true;
 }
 

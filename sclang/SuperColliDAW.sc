@@ -9,6 +9,7 @@ SuperColliDAW {
 		// Its own NetAddr, because inside Server:makeBundle (s.bind) server.addr collects messages into the bundle.
 		pluginAddr = NetAddr("127.0.0.1", port.asInteger);
 		Server.default = server;
+		StartUp.add { SuperColliDAWMIDI.receive };
 	}
 
 	*serverStarted {
@@ -32,6 +33,10 @@ SuperColliDAW {
 
 	*stop {
 		CmdPeriod.run;
+	}
+
+	*instrument { |synthDefOrFunction|
+		^SuperColliDAWInstrument(synthDefOrFunction)
 	}
 
 	*prWhenRunning { |function|

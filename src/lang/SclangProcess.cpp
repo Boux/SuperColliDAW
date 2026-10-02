@@ -54,9 +54,10 @@ std::string scStringLiteral(const std::string& text) {
 
 }
 
-SclangProcess::SclangProcess(Config config): mConfig(std::move(config)), mStdout(mConfig.onPost), mStderr(mConfig.onPost) {
+SclangProcess::SclangProcess(Config config):
+    mConfig(std::move(config)), mLangPort(freeUdpPort()), mStdout(mConfig.onPost), mStderr(mConfig.onPost) {
     const std::vector<std::string> arguments = {
-        mConfig.executable, "-i", "supercollidaw", "-u", std::to_string(freeUdpPort()), "--include-path", mConfig.classLibraryDir,
+        mConfig.executable, "-i", "supercollidaw", "-u", std::to_string(mLangPort), "--include-path", mConfig.classLibraryDir,
     };
     const auto environment = environmentWith({
         { "SUPERCOLLIDAW_SERVER_PORT", std::to_string(mConfig.serverPort) },

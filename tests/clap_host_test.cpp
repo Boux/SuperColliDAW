@@ -12,6 +12,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -102,9 +103,10 @@ const clap_host kHost = {
     .request_callback = [](const clap_host*) { gMainThreadCallbackRequested = true; },
 };
 
-struct ParameterEvents {
+struct InputEvents {
     std::vector<clap_event_param_value> values;
     std::vector<clap_event_param_mod> modulations;
+    std::vector<clap_event_midi> midi;
     std::vector<const clap_event_header*> headers;
 
     const clap_input_events* list() {
@@ -113,11 +115,13 @@ struct ParameterEvents {
             headers.push_back(&event.header);
         for (const auto& event : modulations)
             headers.push_back(&event.header);
+        for (const auto& event : midi)
+            headers.push_back(&event.header);
         static clap_input_events events;
         events = {
             .ctx = this,
-            .size = [](const clap_input_events* e) { return static_cast<uint32_t>(static_cast<ParameterEvents*>(e->ctx)->headers.size()); },
-            .get = [](const clap_input_events* e, uint32_t index) { return static_cast<ParameterEvents*>(e->ctx)->headers[index]; },
+            .size = [](const clap_input_events* e) { return static_cast<uint32_t>(static_cast<InputEvents*>(e->ctx)->headers.size()); },
+            .get = [](const clap_input_events* e, uint32_t index) { return static_cast<InputEvents*>(e->ctx)->headers[index]; },
         };
         return &events;
     }
@@ -125,6 +129,7 @@ struct ParameterEvents {
     void clear() {
         values.clear();
         modulations.clear();
+        midi.clear();
     }
 };
 
@@ -189,11 +194,23 @@ public:
         return left;
     }
 
-    bool waitForSound() {
+    bool waitForSound(const std::function<void()>& beforeEachTry = [] {}) {
         const std::vector<float> silence(kMaxFrames, 0.f);
         const auto deadline = std::chrono::steady_clock::now() + kSclangStartTimeout;
         while (std::chrono::steady_clock::now() < deadline) {
+            beforeEachTry();
             if (peak(run(silence, kMaxFrames)) > kTestSineAmp * 0.5f)
+                return true;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return false;
+    }
+
+    bool waitForSilence() {
+        const std::vector<float> silence(kMaxFrames, 0.f);
+        const auto deadline = std::chrono::steady_clock::now() + kSclangStartTimeout;
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (peak(run(silence, kMaxFrames)) < 1e-4f)
                 return true;
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
@@ -217,12 +234,18 @@ public:
         return state->load(mPlugin, readingStream(cursor));
     }
 
-    double waitForFrequency(double expectedHz) {
+    double waitForFrequency(double expectedHz, const std::function<void()>& beforeEachTry = [] {}) {
         double frequency = 0.0;
         const auto deadline = std::chrono::steady_clock::now() + kSclangStartTimeout;
-        while (std::fabs(frequency - expectedHz) > 4.0 && std::chrono::steady_clock::now() < deadline)
+        while (std::fabs(frequency - expectedHz) > 4.0 && std::chrono::steady_clock::now() < deadline) {
+            beforeEachTry();
             frequency = estimateFrequency(runSilence(0.5, kMaxFrames), mSampleRate);
+        }
         return frequency;
+    }
+
+    void sendMidi(uint8_t status, uint8_t data1, uint8_t data2) {
+        mEvents.midi.push_back({ .header = eventHeader(CLAP_EVENT_MIDI, sizeof(clap_event_midi)), .port_index = 0, .data = { status, data1, data2 } });
     }
 
     void setParameter(clap_id id, double value) {
@@ -297,7 +320,7 @@ private:
     }
 
     double mSampleRate;
-    ParameterEvents mEvents;
+    InputEvents mEvents;
     const clap_plugin* mPlugin = nullptr;
     bool mActive = false;
 };
@@ -396,6 +419,44 @@ void testStuckSclangDoesNotBlockTheHost(const clap_plugin_factory* factory) {
     check(elapsed.count() < 1.0, "a stuck sclang does not block the host's main thread");
 }
 
+void testTrackMidiReachesMIDIdef(const clap_plugin_factory* factory) {
+    const std::string code = "MIDIClient.init;\n"
+                             "MIDIIn.connectAll;\n"
+                             "if(MIDIClient.sources.collect(_.device) != [\"SuperColliDAW\"]) { Error(\"MIDIClient lists more than the track\").throw };\n"
+                             "MIDIdef.noteOn(\\test, { |vel, note| ~synth ?? { ~synth = { SinOsc.ar(note.midicps, 0, vel / 1270) }.play } });\n";
+    Instance instance(factory, 48000.0);
+    instance.waitForSound();
+    instance.loadState(supercollidaw::encodeState({ code, "", {} }));
+    const double frequency = instance.waitForFrequency(880.0, [&] { instance.sendMidi(0x90, 81, 127); });
+    std::printf("  note 81 from the track: %.2f Hz\n", frequency);
+    check(std::fabs(frequency - 880.0) <= 4.0, "a note from the track reaches MIDIdef.noteOn, and MIDIClient lists only the track");
+}
+
+void testInstrumentPlaysTrackNotes(const clap_plugin_factory* factory) {
+    Instance instance(factory, 48000.0);
+    instance.waitForSound();
+    instance.loadState(supercollidaw::encodeState({ "SuperColliDAW.instrument { |freq, amp| SinOsc.ar(freq, 0, amp * 0.1) };\n", "", {} }));
+    instance.waitForSilence();
+    instance.waitForSound([&] { instance.sendMidi(0x90, 81, 127); });
+    const double frequency = instance.waitForFrequency(880.0);
+    std::printf("  note 81 on: %.2f Hz\n", frequency);
+    check(std::fabs(frequency - 880.0) <= 4.0, "SuperColliDAW.instrument plays a synth for a note from the track");
+    instance.sendMidi(0x80, 81, 0);
+    check(instance.waitForSilence(), "a note-off from the track releases that synth");
+}
+
+void testInstrumentPassesNoteDetails(const clap_plugin_factory* factory) {
+    Instance instance(factory, 48000.0);
+    instance.waitForSound();
+    const std::string code = "SuperColliDAW.instrument { |midinote, velocity, chan| SinOsc.ar((midinote + chan).midicps, 0, velocity / 1270) };\n";
+    instance.loadState(supercollidaw::encodeState({ code, "", {} }));
+    instance.waitForSilence();
+    instance.waitForSound([&] { instance.sendMidi(0x91, 80, 127); });
+    const double frequency = instance.waitForFrequency(880.0);
+    std::printf("  note 80 on channel 1: %.2f Hz\n", frequency);
+    check(std::fabs(frequency - 880.0) <= 4.0, "the instrument passes midinote, velocity and chan to each synth");
+}
+
 void testParameters(const clap_plugin_factory* factory) {
     const std::string code = "{ SinOsc.ar(SuperColliDAW.kr(0, \\pitch, [200, 800, \\exp]), 0, 0.1 * (1 - (In.kr(5) * 0.001))) }.play;\n"
                              "s.bind { { SuperColliDAW.kr(2, \\bundled); Silent.ar }.play };\n";
@@ -463,6 +524,9 @@ int main(int argc, char** argv) {
     testLinkedFileRerunsWhenSaved(factory);
     testReactivationKeepsServerNotifications(factory);
     testStuckSclangDoesNotBlockTheHost(factory);
+    testTrackMidiReachesMIDIdef(factory);
+    testInstrumentPlaysTrackNotes(factory);
+    testInstrumentPassesNoteDetails(factory);
     testParameters(factory);
     entry->deinit();
 

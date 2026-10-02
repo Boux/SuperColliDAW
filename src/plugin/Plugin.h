@@ -6,6 +6,7 @@
 #include "engine/OscPort.h"
 #include "lang/PostLog.h"
 #include "lang/SclangProcess.h"
+#include "midi/MidiForwarder.h"
 #include "params/ParameterBank.h"
 #include "params/ParameterWatcher.h"
 
@@ -45,6 +46,7 @@ private:
     void pollSclang();
 
     void startSclang();
+    void stopSclang();
     void run(const std::string& code);
     void evaluate(const std::string& code);
     void stopSound();
@@ -58,8 +60,11 @@ private:
     static uint32_t audioPortCount(const clap_plugin* plugin, bool isInput);
     static bool audioPortInfo(const clap_plugin* plugin, uint32_t index, bool isInput, clap_audio_port_info* info);
     static uint32_t latency(const clap_plugin* plugin);
+    static uint32_t notePortCount(const clap_plugin* plugin, bool isInput);
+    static bool notePortInfo(const clap_plugin* plugin, uint32_t index, bool isInput, clap_note_port_info* info);
 
     static const clap_plugin_audio_ports kAudioPorts;
+    static const clap_plugin_note_ports kNotePorts;
     static const clap_plugin_latency kLatency;
     static const clap_plugin_timer_support kTimerSupport;
     static const clap_plugin_state kState;
@@ -75,6 +80,7 @@ private:
     ParameterBank mParameters;
     ParameterWatcher mWatcher;
     std::unique_ptr<OscPort> mOscPort;
+    std::unique_ptr<MidiForwarder> mMidi;
     std::unique_ptr<SclangProcess> mSclang;
     std::unique_ptr<CodeController> mCode;
     std::unique_ptr<PluginGui> mGui;

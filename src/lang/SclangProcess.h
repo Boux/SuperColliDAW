@@ -35,6 +35,7 @@ public:
     SclangProcess(const SclangProcess&) = delete;
     SclangProcess& operator=(const SclangProcess&) = delete;
 
+    uint16_t langPort() const { return mLangPort; }
     bool isRunning() { return !exitStatus(); }
     std::optional<int> exitStatus();
     void serverStarted();
@@ -48,6 +49,7 @@ private:
     void shutdown();
 
     Config mConfig;
+    uint16_t mLangPort;
     LineBuffer mStdout;
     LineBuffer mStderr;
     std::unique_ptr<TinyProcessLib::Process> mProcess;

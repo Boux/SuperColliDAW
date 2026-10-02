@@ -43,6 +43,7 @@ add_library(supercollidaw_clap MODULE
     plugin/code/DefaultCode.cpp
     plugin/code/FileDialog.cpp
     plugin/code/LinkedFile.cpp
+    plugin/midi/MidiForwarder.cpp
     plugin/params/ParameterBank.cpp
     plugin/params/ParameterEventReader.cpp
     plugin/params/ParameterExtension.cpp
@@ -58,18 +59,19 @@ set_target_properties(supercollidaw_clap PROPERTIES OUTPUT_NAME SuperColliDAW PR
 if(UNIX AND NOT APPLE)
     target_link_options(supercollidaw_clap PRIVATE -Wl,--no-undefined -Wl,--exclude-libs,ALL)
 endif()
-file(GLOB SCLANG_CLASSES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/sclang/*.sc)
+file(GLOB_RECURSE SCLANG_CLASSES CONFIGURE_DEPENDS RELATIVE ${CMAKE_SOURCE_DIR}/sclang ${CMAKE_SOURCE_DIR}/sclang/*.sc)
 set(SCLANG_CLASSES_DIR ${CMAKE_CURRENT_BINARY_DIR}/SuperColliDAW/classes)
 set(SCLANG_CLASS_COPIES)
 foreach(class ${SCLANG_CLASSES})
-    get_filename_component(name ${class} NAME)
+    get_filename_component(dir ${SCLANG_CLASSES_DIR}/${class} DIRECTORY)
     add_custom_command(
-        OUTPUT ${SCLANG_CLASSES_DIR}/${name}
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${class} ${SCLANG_CLASSES_DIR}/${name}
-        DEPENDS ${class}
+        OUTPUT ${SCLANG_CLASSES_DIR}/${class}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${dir}
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/sclang/${class} ${SCLANG_CLASSES_DIR}/${class}
+        DEPENDS ${CMAKE_SOURCE_DIR}/sclang/${class}
         VERBATIM
     )
-    list(APPEND SCLANG_CLASS_COPIES ${SCLANG_CLASSES_DIR}/${name})
+    list(APPEND SCLANG_CLASS_COPIES ${SCLANG_CLASSES_DIR}/${class})
 endforeach()
 add_custom_target(supercollidaw_sclang_classes ALL DEPENDS ${SCLANG_CLASS_COPIES})
 add_dependencies(supercollidaw_clap supercollidaw_sclang_classes)
