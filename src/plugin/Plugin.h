@@ -42,11 +42,13 @@ private:
     void onTimer(clap_id timerId);
     void onMainThread();
     void applyParameterEvents();
+    void pollSclang();
 
     void startSclang();
     void run(const std::string& code);
     void evaluate(const std::string& code);
     void stopSound();
+    void rebootInterpreter();
     void markProjectDirty();
     CodeController::Hooks codeHooks();
     EditorActions editorActions();

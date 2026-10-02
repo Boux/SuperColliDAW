@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ServerOutput.h"
+
 #include "SC_Reply.h"
 
 #include <cstdint>
@@ -27,6 +29,7 @@ public:
         uint32_t numInputs;
         uint32_t numOutputs;
         std::string ugenPluginPath;
+        LineBuffer::LineHandler onPost;
     };
 
     static void unloadPlugins();
@@ -43,7 +46,9 @@ public:
 
 private:
     void exchange(const float* const* inputs, float* const* outputs, uint32_t offset, uint32_t numFrames);
+    void drainOutputInNonRealtime();
 
+    ServerOutput mOutput;
     World* mWorld = nullptr;
     SC_PluginDriver* mDriver = nullptr;
     uint32_t mNumInputs;

@@ -71,6 +71,10 @@ void EditorView::drawToolbar() {
     if (ImGui::Button("Stop"))
         mActions.stop();
     ImGui::SetItemTooltip("Stop all sound (Ctrl+.)");
+    ImGui::SameLine();
+    if (ImGui::Button("Reboot interpreter"))
+        mActions.rebootInterpreter();
+    ImGui::SetItemTooltip("Restart sclang and the server, then run the whole code (Ctrl+Shift+L)");
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemSpacing.x * 4.f);
     drawFileButtons();
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemSpacing.x * 4.f);
@@ -109,6 +113,8 @@ void EditorView::handleShortcuts() {
         mActions.evaluate(selectionOrLine());
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Period, kOverEditor))
         mActions.stop();
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_L, kOverEditor))
+        mActions.rebootInterpreter();
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, kOverEditor))
         mActions.save(mEditor.GetText());
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, kOverEditor))

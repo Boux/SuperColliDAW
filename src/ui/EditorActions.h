@@ -15,6 +15,7 @@ struct EditorActions {
     std::function<void(const std::string& code)> runAll;
     std::function<void(const std::string& code)> evaluate;
     std::function<void()> stop;
+    std::function<void()> rebootInterpreter;
     std::function<void(const std::string& code)> codeChanged;
     std::function<void()> open;
     std::function<void(const std::string& code)> save;

@@ -169,6 +169,14 @@ public:
     }
 
     bool active() const { return mActive; }
+
+    bool reactivate(double sampleRate) {
+        mPlugin->stop_processing(mPlugin);
+        mPlugin->deactivate(mPlugin);
+        mSampleRate = sampleRate;
+        mActive = mPlugin->activate(mPlugin, sampleRate, 1, kMaxFrames) && mPlugin->start_processing(mPlugin);
+        return mActive;
+    }
     const clap_plugin* clapPlugin() const { return mPlugin; }
 
     std::vector<float> run(const std::vector<float>& input, uint32_t framesPerCall) {
@@ -360,13 +368,43 @@ void testLinkedFileRerunsWhenSaved(const clap_plugin_factory* factory) {
     check(std::fabs(frequency - 880.0) <= 4.0, "saving the linked file re-runs it");
 }
 
+void testReactivationKeepsServerNotifications(const clap_plugin_factory* factory) {
+    const std::string code = "OSCFunc({ { SinOsc.ar(660, 0, 0.1) }.play }, '/tr').oneShot;\n{ SendTrig.kr(Impulse.kr(10)); Silent.ar }.play;\n";
+    Instance instance(factory, 48000.0);
+    instance.waitForSound();
+    instance.loadState(supercollidaw::encodeState({ code, "", {} }));
+    const double before = instance.waitForFrequency(660.0);
+    std::printf("  before reactivating: %.2f Hz\n", before);
+    check(std::fabs(before - 660.0) <= 4.0, "a SendTrig reply reaches sclang and starts a synth");
+    check(instance.reactivate(44100.0), "the plugin reactivates at another sample rate");
+    const double after = instance.waitForFrequency(660.0);
+    std::printf("  after reactivating: %.2f Hz\n", after);
+    check(std::fabs(after - 660.0) <= 4.0, "server notifications still reach sclang after the host reactivates the plugin");
+}
+
+void testStuckSclangDoesNotBlockTheHost(const clap_plugin_factory* factory) {
+    Instance instance(factory, 48000.0);
+    instance.waitForSound();
+    instance.loadState(supercollidaw::encodeState({ "{ SinOsc.ar(660, 0, 0.1) }.play;\ninf.do {};\n", "", {} }));
+    instance.waitForFrequency(660.0);
+    const std::string moreThanAPipeHolds = "// " + std::string(256 * 1024, 'x') + "\n";
+    const auto start = std::chrono::steady_clock::now();
+    for (int run = 0; run < 4; ++run)
+        instance.loadState(supercollidaw::encodeState({ moreThanAPipeHolds, "", {} }));
+    const std::chrono::duration<double> elapsed = std::chrono::steady_clock::now() - start;
+    std::printf("  sending 1 MB of code to a stuck sclang took %.3f s\n", elapsed.count());
+    check(elapsed.count() < 1.0, "a stuck sclang does not block the host's main thread");
+}
+
 void testParameters(const clap_plugin_factory* factory) {
-    const std::string code = "{ SinOsc.ar(SuperColliDAW.kr(0, \\pitch, [200, 800, \\exp]), 0, 0.1 * (1 - (In.kr(5) * 0.001))) }.play;\n";
+    const std::string code = "{ SinOsc.ar(SuperColliDAW.kr(0, \\pitch, [200, 800, \\exp]), 0, 0.1 * (1 - (In.kr(5) * 0.001))) }.play;\n"
+                             "s.bind { { SuperColliDAW.kr(2, \\bundled); Silent.ar }.play };\n";
     Instance instance(factory, 48000.0);
     instance.waitForSound();
     instance.loadState(supercollidaw::encodeState({ code, "", {} }));
     check(instance.waitForParameter(0, "pitch"), "SuperColliDAW.kr(0, \\pitch) shows parameter 0 named pitch");
     check(instance.waitForParameter(5, "In.kr(5)"), "In.kr(5) shows parameter 5");
+    check(instance.waitForParameter(2, "bundled"), "SuperColliDAW.kr inside s.bind shows its parameter");
     check(instance.parameterInfo(1).flags & CLAP_PARAM_IS_HIDDEN, "unused parameters stay hidden");
     std::printf("  default: %.2f Hz\n", instance.waitForFrequency(200.0));
 
@@ -423,6 +461,8 @@ int main(int argc, char** argv) {
     testTwoInstancesRunTogether(factory);
     testStateRestoresCode(factory);
     testLinkedFileRerunsWhenSaved(factory);
+    testReactivationKeepsServerNotifications(factory);
+    testStuckSclangDoesNotBlockTheHost(factory);
     testParameters(factory);
     entry->deinit();
 

@@ -1,8 +1,11 @@
 #pragma once
 
+#include "text/LineBuffer.h"
+
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace TinyProcessLib {
@@ -10,6 +13,8 @@ class Process;
 }
 
 namespace supercollidaw {
+
+class StdinWriter;
 
 class SclangProcess {
 public:
@@ -30,22 +35,15 @@ public:
     SclangProcess(const SclangProcess&) = delete;
     SclangProcess& operator=(const SclangProcess&) = delete;
 
-    bool isRunning();
+    bool isRunning() { return !exitStatus(); }
+    std::optional<int> exitStatus();
+    void serverStarted();
+    void serverStopped();
     void run(const std::string& code);
     void evaluate(const std::string& code);
     void stopSound();
 
 private:
-    class LineBuffer {
-    public:
-        explicit LineBuffer(const PostHandler& onLine): mOnLine(onLine) {}
-        void feed(const char* bytes, size_t size);
-
-    private:
-        const PostHandler& mOnLine;
-        std::string mPartial;
-    };
-
     void send(const std::string& expression);
     void shutdown();
 
@@ -53,6 +51,7 @@ private:
     LineBuffer mStdout;
     LineBuffer mStderr;
     std::unique_ptr<TinyProcessLib::Process> mProcess;
+    std::unique_ptr<StdinWriter> mStdin;
 };
 
 }

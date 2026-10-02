@@ -29,6 +29,7 @@ std::vector<float*> channelPointers(std::vector<float>& stage, uint32_t numChann
 void Engine::unloadPlugins() { World_UnloadPlugins(); }
 
 Engine::Engine(const Config& config):
+    mOutput(config.onPost),
     mNumInputs(config.numInputs),
     mNumOutputs(config.numOutputs),
     mInStage(config.numInputs * kBlockSize, 0.f),
@@ -46,17 +47,28 @@ Engine::Engine(const Config& config):
     options.mRendezvous = false;
     options.mUGensPluginPath = config.ugenPluginPath.c_str();
 
+    ServerOutput::install();
+    ServerOutput::Scope output(mOutput, ServerOutput::Thread::nonRealtime);
     mWorld = World_New(&options);
     if (mWorld)
         mDriver = static_cast<SC_PluginDriver*>(mWorld->hw->mAudioDriver);
 }
 
 Engine::~Engine() {
-    if (mWorld)
+    if (!mWorld)
+        return;
+    {
+        ServerOutput::Scope output(mOutput, ServerOutput::Thread::nonRealtime);
         World_Cleanup(mWorld, false);
+    }
+    mOutput.drain();
 }
 
 void Engine::process(const float* const* inputs, float* const* outputs, uint32_t numFrames, ControlSource& controls) {
+    ServerOutput::Scope output(mOutput, ServerOutput::Thread::realtime);
+    // Before BeginCallback, so the first drain binds the NRT thread before any async command stage runs there.
+    if (mOutput.takeDrainRequest())
+        drainOutputInNonRealtime();
     mDriver->BeginCallback();
     for (uint32_t done = 0; done < numFrames;) {
         const uint32_t n = std::min(numFrames - done, kBlockSize - mStagePos);
@@ -80,7 +92,14 @@ void Engine::exchange(const float* const* inputs, float* const* outputs, uint32_
         std::memcpy(outputs[ch] + offset, mOutStagePtrs[ch] + mStagePos, bytes);
 }
 
+void Engine::drainOutputInNonRealtime() {
+    FifoMsg message;
+    message.Set(mWorld, ServerOutput::drainInNonRealtime, nullptr, &mOutput);
+    mDriver->SendMsgFromEngine(message);
+}
+
 bool Engine::sendPacket(char* data, int size, ReplyFunc replyFunc, void* replyContext) {
+    ServerOutput::Scope output(mOutput, ServerOutput::Thread::nonRealtime);
     return World_SendPacketWithContext(mWorld, size, data, replyFunc, replyContext);
 }
 

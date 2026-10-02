@@ -1,5 +1,6 @@
 #include "SclangProcess.h"
 
+#include "StdinWriter.h"
 #include "process.hpp"
 
 #include <boost/asio/io_context.hpp>
@@ -53,16 +54,6 @@ std::string scStringLiteral(const std::string& text) {
 
 }
 
-void SclangProcess::LineBuffer::feed(const char* bytes, size_t size) {
-    mPartial.append(bytes, size);
-    size_t start = 0;
-    for (size_t end = mPartial.find('\n'); end != std::string::npos; end = mPartial.find('\n', start)) {
-        mOnLine(mPartial.substr(start, end - start));
-        start = end + 1;
-    }
-    mPartial.erase(0, start);
-}
-
 SclangProcess::SclangProcess(Config config): mConfig(std::move(config)), mStdout(mConfig.onPost), mStderr(mConfig.onPost) {
     const std::vector<std::string> arguments = {
         mConfig.executable, "-i", "supercollidaw", "-u", std::to_string(freeUdpPort()), "--include-path", mConfig.classLibraryDir,
@@ -76,14 +67,19 @@ SclangProcess::SclangProcess(Config config): mConfig(std::move(config)), mStdout
     mProcess = std::make_unique<TinyProcessLib::Process>(
         arguments, std::string(), environment, [this](const char* bytes, size_t size) { mStdout.feed(bytes, size); },
         [this](const char* bytes, size_t size) { mStderr.feed(bytes, size); }, true);
+    mStdin = std::make_unique<StdinWriter>(*mProcess);
 }
 
 SclangProcess::~SclangProcess() { shutdown(); }
 
-bool SclangProcess::isRunning() {
-    int exitStatus;
-    return mProcess->get_id() > 0 && !mProcess->try_get_exit_status(exitStatus);
+std::optional<int> SclangProcess::exitStatus() {
+    int status = 0;
+    return mProcess->try_get_exit_status(status) ? std::optional<int>(status) : std::nullopt;
 }
+
+void SclangProcess::serverStarted() { send("SuperColliDAW.serverStarted"); }
+
+void SclangProcess::serverStopped() { send("SuperColliDAW.serverStopped"); }
 
 void SclangProcess::run(const std::string& code) { send("SuperColliDAW.run(" + scStringLiteral(code) + ")"); }
 
@@ -91,13 +87,13 @@ void SclangProcess::evaluate(const std::string& code) { send("SuperColliDAW.eval
 
 void SclangProcess::stopSound() { send("SuperColliDAW.stop"); }
 
-void SclangProcess::send(const std::string& expression) { mProcess->write(expression + ";" + kInterpretSilently); }
+void SclangProcess::send(const std::string& expression) { mStdin->write(expression + ";" + kInterpretSilently); }
 
 void SclangProcess::shutdown() {
     if (!isRunning())
         return;
     send("0.exit");
-    mProcess->close_stdin();
+    mStdin->close();
     const auto deadline = std::chrono::steady_clock::now() + kExitTimeout;
     while (isRunning() && std::chrono::steady_clock::now() < deadline)
         std::this_thread::sleep_for(kExitPollInterval);

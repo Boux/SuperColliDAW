@@ -114,12 +114,15 @@ void Plugin::startSclang() {
 }
 
 bool Plugin::activate(double sampleRate, uint32_t maxFrames) {
-    auto engine = std::make_unique<Engine>(Engine::Config{ sampleRate, kNumChannels, kNumChannels, installedUGenPluginPath() });
+    auto engine = std::make_unique<Engine>(
+        Engine::Config{ sampleRate, kNumChannels, kNumChannels, installedUGenPluginPath(), [this](const std::string& line) { post(line); } });
     if (!engine->isRunning())
         return false;
     mSilence.assign(maxFrames, 0.f);
     mEngine = std::move(engine);
     mOscPort->attach(mEngine.get());
+    if (mSclang)
+        mSclang->serverStarted();
     run(mCode->code());
     return true;
 }
@@ -127,6 +130,8 @@ bool Plugin::activate(double sampleRate, uint32_t maxFrames) {
 void Plugin::deactivate() {
     mOscPort->attach(nullptr);
     mEngine.reset();
+    if (mSclang)
+        mSclang->serverStopped();
 }
 
 void Plugin::onTimer(clap_id timerId) {
@@ -136,6 +141,7 @@ void Plugin::onTimer(clap_id timerId) {
         return;
     mCode->poll();
     applyParameterEvents();
+    pollSclang();
 }
 
 void Plugin::onMainThread() { applyParameterEvents(); }
@@ -145,6 +151,21 @@ void Plugin::applyParameterEvents() {
     const clap_param_rescan_flags flags = (changes.info ? CLAP_PARAM_RESCAN_INFO | CLAP_PARAM_RESCAN_TEXT : 0) | (changes.values ? CLAP_PARAM_RESCAN_VALUES : 0);
     if (flags && mHostParams && mHostParams->rescan)
         mHostParams->rescan(mHost, flags);
+}
+
+void Plugin::pollSclang() {
+    const std::optional<int> exitStatus = mSclang ? mSclang->exitStatus() : std::nullopt;
+    if (!exitStatus)
+        return;
+    post("sclang exited with code " + std::to_string(*exitStatus) + ". Reboot the interpreter to run code again.");
+    mSclang.reset();
+}
+
+void Plugin::rebootInterpreter() {
+    mSclang.reset();
+    startSclang();
+    if (mEngine)
+        mHost->request_restart(mHost);
 }
 
 void Plugin::run(const std::string& code) {
@@ -184,6 +205,7 @@ EditorActions Plugin::editorActions() {
         .runAll = [this](const std::string& code) { mCode->runAll(code); },
         .evaluate = [this](const std::string& code) { evaluate(code); },
         .stop = [this] { stopSound(); },
+        .rebootInterpreter = [this] { rebootInterpreter(); },
         .codeChanged = [this](const std::string& code) { mCode->edit(code); },
         .open = [this] { mCode->open(); },
         .save = [this](const std::string& code) { mCode->save(code); },

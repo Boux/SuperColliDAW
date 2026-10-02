@@ -30,3 +30,7 @@ add_test(NAME synthdef_controls_test COMMAND synthdef_controls_test ${CMAKE_CURR
 add_executable(parameter_spec_test parameter_spec_test.cpp ${CMAKE_SOURCE_DIR}/src/plugin/params/ParameterSpec.cpp)
 target_include_directories(parameter_spec_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME parameter_spec_test COMMAND parameter_spec_test)
+
+add_executable(server_output_test server_output_test.cpp)
+target_link_libraries(server_output_test PRIVATE supercollidaw_engine)
+add_test(NAME server_output_test COMMAND server_output_test)

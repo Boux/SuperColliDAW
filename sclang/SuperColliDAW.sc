@@ -1,13 +1,22 @@
 SuperColliDAW {
-	classvar <server;
+	classvar <server, pluginAddr;
 
 	*initClass {
 		var port = "SUPERCOLLIDAW_SERVER_PORT".getenv;
 		if(port.isNil) { ^this };
 		Class.initClassTree(Server);
 		server = SuperColliDAWServer(\supercollidaw, NetAddr("127.0.0.1", port.asInteger), this.prServerOptions);
+		// Its own NetAddr, because inside Server:makeBundle (s.bind) server.addr collects messages into the bundle.
+		pluginAddr = NetAddr("127.0.0.1", port.asInteger);
 		Server.default = server;
-		StartUp.add { server.startAliveThread };
+	}
+
+	*serverStarted {
+		server.boot;
+	}
+
+	*serverStopped {
+		server.prStopped;
 	}
 
 	*run { |code|
@@ -39,7 +48,7 @@ SuperColliDAW {
 		var warp;
 		spec = this.prSpec(spec, name);
 		warp = spec.warp.asSpecifier;
-		server.addr.sendMsg('/supercollidaw/param', index, name.asString, spec.minval, spec.maxval,
+		pluginAddr.sendMsg('/supercollidaw/param', index, name.asString, spec.minval, spec.maxval,
 			if(warp.isNumber) { "curve" } { warp.asString }, if(warp.isNumber) { warp } { 0 },
 			spec.step, spec.default, spec.units.asString);
 	}
@@ -71,5 +80,14 @@ SuperColliDAWServer : Server {
 
 	quit { |onComplete, onFailure, watchShutDown = true|
 		"SuperColliDAW: the server lives inside the plugin and cannot be quit.".postln;
+	}
+
+	// Server:quit without sending /quit: the plugin has already destroyed the server.
+	prStopped {
+		statusWatcher.quit(watchShutDown: false);
+		maxNumClients = nil;
+		volume.freeSynth;
+		RootNode(this).freeAll;
+		this.newAllocators;
 	}
 }
