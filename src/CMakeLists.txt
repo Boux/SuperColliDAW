@@ -46,6 +46,7 @@ add_library(supercollidaw_clap MODULE
     plugin/code/FileDialog.cpp
     plugin/code/LinkedFile.cpp
     plugin/midi/MidiInput.cpp
+    plugin/midi/MidiOutput.cpp
     plugin/params/ParameterBank.cpp
     plugin/params/ParameterEventReader.cpp
     plugin/params/ParameterExtension.cpp

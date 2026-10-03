@@ -18,8 +18,26 @@ SuperColliDAWMIDI {
 		);
 	}
 
+	*send { |latency, status, data1, data2|
+		SuperColliDAW.pluginAddr.sendBundle(this.prBundleTime(latency), this.prMessage(status, data1, data2));
+	}
+
+	// In one bundle after /clearSched, so no note-on already scheduled on the server can follow the release.
+	*cmdPeriod {
+		SuperColliDAW.pluginAddr.sendBundle(nil, ['/clearSched'], *16.collect { |chan| this.prMessage(16rB0 | chan, 123, 0) });
+	}
+
 	// In the order MIDIClient:list reads them: source uids, devices, names, then destination uids, names, devices.
 	*endpoints {
-		^[[uid], ["SuperColliDAW"], ["Track"], [], [], []]
+		^[[uid], ["SuperColliDAW"], ["Track"], [uid], ["Track"], ["SuperColliDAW"]]
+	}
+
+	*prMessage { |status, data1, data2|
+		^['/cmd', '/supercollidaw/midiOut', status, data1, data2]
+	}
+
+	// A bundle at the current logical time always arrives late, so no latency means as soon as possible.
+	*prBundleTime { |latency|
+		^if((latency ? 0) > 0) { latency }
 	}
 }

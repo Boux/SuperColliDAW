@@ -1,5 +1,7 @@
 #pragma once
 
+#include "midi/MidiMessage.h"
+
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/lockfree/spsc_queue.hpp>
@@ -11,12 +13,6 @@
 #include <variant>
 
 namespace supercollidaw {
-
-struct MidiMessage {
-    uint8_t status;
-    uint8_t data1;
-    uint8_t data2;
-};
 
 struct TransportMessage {
     int64_t oscTime;

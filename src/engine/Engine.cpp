@@ -51,8 +51,10 @@ Engine::Engine(const Config& config):
     ServerOutput::install();
     ServerOutput::Scope output(mOutput, ServerOutput::Thread::nonRealtime);
     mWorld = World_New(&options);
-    if (mWorld)
-        mDriver = static_cast<SC_PluginDriver*>(mWorld->hw->mAudioDriver);
+    if (!mWorld)
+        return;
+    mDriver = static_cast<SC_PluginDriver*>(mWorld->hw->mAudioDriver);
+    mPendingMidi.reserve(mDriver->MidiOut().capacity());
 }
 
 Engine::~Engine() {
@@ -65,7 +67,7 @@ Engine::~Engine() {
     mOutput.drain();
 }
 
-void Engine::process(const float* const* inputs, float* const* outputs, uint32_t numFrames, ControlSource& controls) {
+void Engine::process(const float* const* inputs, float* const* outputs, uint32_t numFrames, ControlSource& controls, MidiSink& midi) {
     ServerOutput::Scope output(mOutput, ServerOutput::Thread::realtime);
     // Before BeginCallback, so the first drain binds the NRT thread before any async command stage runs there.
     if (mOutput.takeDrainRequest())
@@ -73,6 +75,7 @@ void Engine::process(const float* const* inputs, float* const* outputs, uint32_t
     mClock.update(mSampleCount, oscTimeNow());
     mCallbackStart = mSampleCount;
     mDriver->BeginCallback(mClock.oscTimeAt(mSampleCount - mStagePos));
+    writePendingMidi(numFrames, midi);
     for (uint32_t done = 0; done < numFrames;) {
         const uint32_t n = std::min(numFrames - done, kBlockSize - mStagePos);
         exchange(inputs, outputs, done, n);
@@ -82,6 +85,7 @@ void Engine::process(const float* const* inputs, float* const* outputs, uint32_t
             continue;
         controls.writeControls(done, mWorld->mControlBus, mWorld->mNumControlBusChannels);
         mDriver->RunBlock(mInStagePtrs.data(), mNumInputs, mOutStagePtrs.data(), mNumOutputs);
+        writeBlockMidi(done, numFrames, midi);
         mStagePos = 0;
     }
     mDriver->EndCallback();
@@ -94,6 +98,22 @@ void Engine::exchange(const float* const* inputs, float* const* outputs, uint32_
         std::memcpy(mInStagePtrs[ch] + mStagePos, inputs[ch] + offset, bytes);
     for (uint32_t ch = 0; ch < mNumOutputs; ++ch)
         std::memcpy(outputs[ch] + offset, mOutStagePtrs[ch] + mStagePos, bytes);
+}
+
+// A block's output starts at the frame where its input filled up, which keeps its MIDI aligned with its audio.
+void Engine::writeBlockMidi(uint32_t blockStart, uint32_t numFrames, MidiSink& midi) {
+    for (const BlockMidi& event : mDriver->MidiOut())
+        mPendingMidi.push_back({ mCallbackStart + blockStart + event.offset, event.message });
+    mDriver->ClearMidiOut();
+    writePendingMidi(numFrames, midi);
+}
+
+void Engine::writePendingMidi(uint32_t numFrames, MidiSink& midi) {
+    const uint64_t end = mCallbackStart + numFrames;
+    const auto due = std::ranges::partition_point(mPendingMidi, [end](const PendingMidi& pending) { return pending.sample < end; });
+    for (const PendingMidi& pending : std::ranges::subrange(mPendingMidi.begin(), due))
+        midi.writeMidi(static_cast<uint32_t>(pending.sample - mCallbackStart), pending.message);
+    mPendingMidi.erase(mPendingMidi.begin(), due);
 }
 
 void Engine::drainOutputInNonRealtime() {

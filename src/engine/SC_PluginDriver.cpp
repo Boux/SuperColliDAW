@@ -3,7 +3,9 @@
 #include "SC_HiddenWorld.h"
 #include "SC_Prototypes.h"
 #include "SC_Time.hpp"
+#include "SC_UnitDef.h"
 #include "SC_WorldOptions.h"
+#include "sc_msg_iter.h"
 
 #include <algorithm>
 #include <cmath>
@@ -11,15 +13,30 @@
 
 void sc_SetDenormalFlags();
 
+namespace {
+
+constexpr char kMidiOutCommand[] = "/supercollidaw/midiOut";
+constexpr size_t kMaxMidiOutPerBlock = 1024;
+
+void performMidiOut(World* world, void*, sc_msg_iter* args, void*) {
+    const auto status = static_cast<uint8_t>(args->geti());
+    const auto data1 = static_cast<uint8_t>(args->geti() & 0x7F);
+    const auto data2 = static_cast<uint8_t>(args->geti() & 0x7F);
+    static_cast<SC_PluginDriver*>(AudioDriver(world))->SendMidi({ status, data1, data2 });
+}
+
+}
+
 int32 server_timeseed() { return timeSeed(); }
 
 int64 oscTimeNow() { return OSCTime(getTime()); }
 
-void initializeScheduler() {}
+// World_New calls this once after each library init, which starts a new plugin command table.
+void initializeScheduler() { PlugIn_DefineCmd(kMidiOutCommand, performMidiOut, nullptr); }
 
 SC_AudioDriver* SC_NewAudioDriver(struct World* inWorld) { return new SC_PluginDriver(inWorld); }
 
-SC_PluginDriver::SC_PluginDriver(struct World* inWorld): SC_AudioDriver(inWorld) {}
+SC_PluginDriver::SC_PluginDriver(struct World* inWorld): SC_AudioDriver(inWorld) { mMidiOut.reserve(kMaxMidiOutPerBlock); }
 
 bool SC_PluginDriver::DriverSetup(int* outNumSamplesPerCallback, double* outSampleRate) {
     if (!mPreferredSampleRate)
@@ -92,3 +109,20 @@ void SC_PluginDriver::PerformScheduledBundles(int64 nextTime) {
 }
 
 void SC_PluginDriver::EndCallback() { mAudioSync.Signal(); }
+
+void SC_PluginDriver::SendMidi(const supercollidaw::MidiMessage& message) {
+    if (mMidiOut.size() == mMidiOut.capacity())
+        return DropMidi();
+    mMidiOut.push_back({ mWorld->mSampleOffset, message });
+}
+
+void SC_PluginDriver::DropMidi() {
+    if (!mMidiOutOverflowed)
+        scprintf("SuperColliDAW: more than %zu MIDI messages in one block, the rest are dropped\n", kMaxMidiOutPerBlock);
+    mMidiOutOverflowed = true;
+}
+
+void SC_PluginDriver::ClearMidiOut() {
+    mMidiOut.clear();
+    mMidiOutOverflowed = false;
+}

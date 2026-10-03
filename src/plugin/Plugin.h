@@ -7,6 +7,7 @@
 #include "lang/PostLog.h"
 #include "lang/SclangOutbox.h"
 #include "lang/SclangProcess.h"
+#include "midi/MidiOutput.h"
 #include "params/ParameterBank.h"
 #include "params/ParameterWatcher.h"
 #include "transport/TransportFollower.h"
@@ -87,6 +88,8 @@ private:
     std::unique_ptr<PluginGui> mGui;
     std::unique_ptr<Engine> mEngine;
     std::unique_ptr<TransportFollower> mTransport;
+    HeldNotes mHeldNotes{};
+    bool mReleaseHeldNotes = false;
     std::vector<float> mSilence;
 };
 

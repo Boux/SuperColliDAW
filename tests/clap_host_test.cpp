@@ -16,6 +16,7 @@
 #include <functional>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -160,9 +161,41 @@ struct HostTransport {
     void advance(uint32_t frames, double sampleRate) { songBeats += playing ? frames / sampleRate * tempo / 60.0 : 0.0; }
 };
 
-const clap_output_events kDiscardOutputEvents = {
-    .ctx = nullptr,
-    .try_push = [](const clap_output_events*, const clap_event_header_t*) { return true; },
+struct OutputMidi {
+    uint64_t frame;
+    uint8_t status;
+    uint8_t data1;
+    uint8_t data2;
+};
+
+struct OutputEvents {
+    std::vector<OutputMidi> midi;
+    uint64_t callbackStart = 0;
+    uint32_t lastTime = 0;
+    bool inOrder = true;
+
+    const clap_output_events* list(uint64_t start) {
+        callbackStart = start;
+        lastTime = 0;
+        static clap_output_events events;
+        events = {
+            .ctx = this,
+            .try_push = [](const clap_output_events* e, const clap_event_header* header) {
+                static_cast<OutputEvents*>(e->ctx)->push(*header);
+                return true;
+            },
+        };
+        return &events;
+    }
+
+    void push(const clap_event_header& header) {
+        inOrder = inOrder && header.time >= lastTime;
+        lastTime = header.time;
+        if (header.space_id != CLAP_CORE_EVENT_SPACE_ID || header.type != CLAP_EVENT_MIDI)
+            return;
+        const auto& event = reinterpret_cast<const clap_event_midi&>(header);
+        midi.push_back({ callbackStart + header.time, event.data[0], event.data[1], event.data[2] });
+    }
 };
 
 int gFailures = 0;
@@ -283,6 +316,22 @@ public:
         return frequency;
     }
 
+    bool waitForMidiOut(uint8_t status, uint8_t data1) {
+        const auto deadline = std::chrono::steady_clock::now() + kSclangStartTimeout;
+        while (std::chrono::steady_clock::now() < deadline) {
+            runSilence(0.05, kMaxFrames);
+            if (std::ranges::any_of(mOutput.midi, [&](const OutputMidi& m) { return m.status == status && m.data1 == data1; }))
+                return true;
+        }
+        return false;
+    }
+
+    std::vector<OutputMidi> takeMidiOut() { return std::exchange(mOutput.midi, {}); }
+
+    bool midiOutInOrder() const { return mOutput.inOrder; }
+
+    uint64_t framesProcessed() const { return mFrames; }
+
     void sendMidi(uint8_t status, uint8_t data1, uint8_t data2) {
         mEvents.midi.push_back({ .header = eventHeader(CLAP_EVENT_MIDI, sizeof(clap_event_midi)), .port_index = 0, .data = { status, data1, data2 } });
     }
@@ -353,16 +402,19 @@ private:
             .audio_inputs_count = 1,
             .audio_outputs_count = 1,
             .in_events = mEvents.list(),
-            .out_events = &kDiscardOutputEvents,
+            .out_events = mOutput.list(mFrames),
         };
         mPlugin->process(mPlugin, &process);
         mEvents.clear();
+        mFrames += frames;
         if (mTransport)
             mTransport->advance(frames, mSampleRate);
     }
 
     double mSampleRate;
     InputEvents mEvents;
+    OutputEvents mOutput;
+    uint64_t mFrames = 0;
     HostTransport* mTransport = nullptr;
     const clap_plugin* mPlugin = nullptr;
     bool mActive = false;
@@ -569,6 +621,74 @@ void testClockFollowsTransport(const clap_plugin_factory* factory) {
     check(std::fabs(stoppedFrequency - 990.0) <= 4.0, "SuperColliDAW.onStop runs when the DAW stops");
 }
 
+std::vector<OutputMidi> midiWithStatus(const std::vector<OutputMidi>& midi, uint8_t status) {
+    std::vector<OutputMidi> matching;
+    std::ranges::copy_if(midi, std::back_inserter(matching), [status](const OutputMidi& m) { return m.status == status; });
+    return matching;
+}
+
+void testPatternMidiReachesTheTrack(const clap_plugin_factory* factory) {
+    const std::string code = "SynthDef(\\click, { |out| OffsetOut.ar(out, Impulse.ar(0) * 0.5); Line.kr(0, 0, 0.01, doneAction: 2) }).add;\n"
+                             "MIDIClient.init;\n"
+                             "~out = MIDIOut.newByName(\"SuperColliDAW\", \"Track\");\n"
+                             "Ppar([Pbind(\\instrument, \\click, \\dur, 0.5), Pbind(\\type, \\midi, \\midiout, ~out, \\midinote, 60, \\dur, 0.5, \\legato, 0.5)]).play;\n";
+    Instance instance(factory, 48000.0);
+    instance.waitForSound();
+    instance.loadState(supercollidaw::encodeState({ code, "", {} }));
+    check(instance.waitForMidiOut(0x90, 60), "a Pbind with \\type \\midi sends notes to the track through MIDIOut");
+
+    instance.takeMidiOut();
+    const uint64_t start = instance.framesProcessed();
+    const std::vector<size_t> clicks = clickFrames(instance.runRealtime(3.0));
+    const uint64_t end = instance.framesProcessed();
+    instance.runRealtime(0.5);
+    const std::vector<OutputMidi> midi = instance.takeMidiOut();
+    std::vector<OutputMidi> noteOns = midiWithStatus(midi, 0x90);
+    std::erase_if(noteOns, [end](const OutputMidi& m) { return m.frame >= end; });
+    const std::vector<OutputMidi> noteOffs = midiWithStatus(midi, 0x80);
+
+    std::vector<size_t> noteOnFrames;
+    std::ranges::transform(noteOns, std::back_inserter(noteOnFrames), [start](const OutputMidi& m) { return static_cast<size_t>(m.frame - start); });
+    const double offset = worstOffsetMs(clicks, noteOnFrames, 48000.0);
+    std::printf("  %zu note-ons and %zu clicks in 3 s, worst offset between a note-on and its click %.3f ms\n", noteOns.size(), clicks.size(), offset);
+    check(noteOns.size() >= 5, "the pattern keeps sending notes");
+    check(offset <= 1.0 / 48.0, "each note-on lands on the same sample as the click from the same event");
+
+    const bool released = std::ranges::all_of(noteOns, [&](const OutputMidi& on) {
+        return std::ranges::any_of(noteOffs, [&](const OutputMidi& off) { return off.data1 == on.data1 && std::llabs(static_cast<long long>(off.frame - on.frame) - 12000) <= 1; });
+    });
+    check(released, "each note-off follows its note-on by the event's sustain");
+    check(instance.midiOutInOrder(), "MIDI events go to the host in sample order");
+}
+
+void testRunAllReleasesHeldMidiNotes(const clap_plugin_factory* factory) {
+    Instance instance(factory, 48000.0);
+    instance.waitForSound();
+    instance.loadState(supercollidaw::encodeState({ "MIDIOut(0).noteOn(0, 64, 100);\n", "", {} }));
+    instance.waitForMidiOut(0x90, 64);
+    instance.takeMidiOut();
+    instance.loadState(supercollidaw::encodeState({ "", "", {} }));
+    check(instance.waitForMidiOut(0x80, 64), "Run all releases a note that MIDIOut left on");
+    const std::vector<OutputMidi> midi = instance.takeMidiOut();
+    const auto allNotesOff = std::ranges::count_if(midi, [](const OutputMidi& m) { return (m.status & 0xF0) == 0xB0 && m.data1 == 123; });
+    std::printf("  after Run all: %zu MIDI events, %td All Notes Off\n", midi.size(), allNotesOff);
+    check(allNotesOff == 16, "Run all sends All Notes Off on every channel");
+}
+
+void testReactivationReleasesHeldMidiNotes(const clap_plugin_factory* factory) {
+    Instance instance(factory, 48000.0);
+    instance.waitForSound();
+    instance.loadState(supercollidaw::encodeState({ "MIDIOut(0).noteOn(2, 65, 100);\n", "", {} }));
+    instance.waitForMidiOut(0x92, 65);
+    instance.takeMidiOut();
+    instance.reactivate(48000.0);
+    const uint64_t start = instance.framesProcessed();
+    instance.runSilence(0.001, kMaxFrames);
+    const std::vector<OutputMidi> midi = instance.takeMidiOut();
+    const bool released = !midi.empty() && midi.front().status == 0x82 && midi.front().data1 == 65 && midi.front().frame == start;
+    check(released, "the first process after a reactivation releases notes the old server left on");
+}
+
 void testParameters(const clap_plugin_factory* factory) {
     const std::string code = "{ SinOsc.ar(SuperColliDAW.kr(0, \\pitch, [200, 800, \\exp]), 0, 0.1 * (1 - (In.kr(5) * 0.001))) }.play;\n"
                              "s.bind { { SuperColliDAW.kr(2, \\bundled); Silent.ar }.play };\n";
@@ -640,6 +760,9 @@ int main(int argc, char** argv) {
     testInstrumentPlaysTrackNotes(factory);
     testInstrumentPassesNoteDetails(factory);
     testClockFollowsTransport(factory);
+    testPatternMidiReachesTheTrack(factory);
+    testRunAllReleasesHeldMidiNotes(factory);
+    testReactivationReleasesHeldMidiNotes(factory);
     testParameters(factory);
     entry->deinit();
 

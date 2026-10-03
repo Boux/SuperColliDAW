@@ -1,5 +1,5 @@
 SuperColliDAW {
-	classvar <server, <clock, pluginAddr;
+	classvar <server, <clock, <pluginAddr;
 
 	*initClass {
 		var port = "SUPERCOLLIDAW_SERVER_PORT".getenv;
@@ -12,7 +12,7 @@ SuperColliDAW {
 		Class.initClassTree(TempoClock);
 		clock = SuperColliDAWClock.new;
 		TempoClock.default = clock;
-		StartUp.add { SuperColliDAWMIDI.receive; clock.prListen };
+		StartUp.add { SuperColliDAWMIDI.receive; CmdPeriod.add(SuperColliDAWMIDI); clock.prListen };
 	}
 
 	*serverStarted {

@@ -10,6 +10,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <utility>
 
 namespace supercollidaw {
 
@@ -20,6 +21,7 @@ const char* const kFeatures[] = { CLAP_PLUGIN_FEATURE_AUDIO_EFFECT, CLAP_PLUGIN_
 constexpr clap_id kMainInputPortId = 0;
 constexpr clap_id kMainOutputPortId = 1;
 constexpr clap_id kNoteInputPortId = 0;
+constexpr clap_id kNoteOutputPortId = 1;
 constexpr uint32_t kCodePollIntervalMs = 250;
 
 float* bufferChannel(const clap_audio_buffer* buffers, uint32_t count, uint32_t channel, float* fallback) {
@@ -143,6 +145,7 @@ void Plugin::deactivate() {
     mOscPort->attach(nullptr);
     mEngine.reset();
     mTransport.reset();
+    mReleaseHeldNotes = true;
     if (mSclang)
         mSclang->serverStopped();
 }
@@ -256,7 +259,10 @@ clap_process_status Plugin::process(const clap_process* process) {
     }
     forwardMidi(process->in_events, *mOutbox);
     ParameterEventReader parameterEvents(mParameters, process->in_events);
-    mEngine->process(inputs, outputs, process->frames_count, parameterEvents);
+    MidiOutput midiOutput(mHeldNotes, process->out_events);
+    if (std::exchange(mReleaseHeldNotes, false))
+        midiOutput.releaseHeldNotes(0);
+    mEngine->process(inputs, outputs, process->frames_count, parameterEvents, midiOutput);
     parameterEvents.applyAll();
     if (const auto transport = mTransport->follow(process->transport, mEngine->oscTimeAtFrame(0), process->frames_count))
         mOutbox->post(*transport);
@@ -297,15 +303,15 @@ bool Plugin::audioPortInfo(const clap_plugin*, uint32_t index, bool isInput, cla
     return true;
 }
 
-uint32_t Plugin::notePortCount(const clap_plugin*, bool isInput) { return isInput ? 1 : 0; }
+uint32_t Plugin::notePortCount(const clap_plugin*, bool) { return 1; }
 
 bool Plugin::notePortInfo(const clap_plugin*, uint32_t index, bool isInput, clap_note_port_info* info) {
-    if (index != 0 || !isInput)
+    if (index != 0)
         return false;
-    info->id = kNoteInputPortId;
+    info->id = isInput ? kNoteInputPortId : kNoteOutputPortId;
     info->supported_dialects = CLAP_NOTE_DIALECT_MIDI;
     info->preferred_dialect = CLAP_NOTE_DIALECT_MIDI;
-    std::strncpy(info->name, "MIDI In", CLAP_NAME_SIZE);
+    std::strncpy(info->name, isInput ? "MIDI In" : "MIDI Out", CLAP_NAME_SIZE);
     return true;
 }
 
