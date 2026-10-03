@@ -2,6 +2,7 @@
 
 #include "PluginPaths.h"
 #include "code/DefaultCode.h"
+#include "code/Examples.h"
 #include "engine/InstalledSuperCollider.h"
 #include "midi/MidiInput.h"
 #include "params/ParameterEventReader.h"
@@ -16,7 +17,7 @@ namespace supercollidaw {
 
 namespace {
 
-const char* const kFeatures[] = { CLAP_PLUGIN_FEATURE_AUDIO_EFFECT, CLAP_PLUGIN_FEATURE_STEREO, nullptr };
+const char* const kFeatures[] = { CLAP_PLUGIN_FEATURE_INSTRUMENT, CLAP_PLUGIN_FEATURE_AUDIO_EFFECT, CLAP_PLUGIN_FEATURE_NOTE_EFFECT, CLAP_PLUGIN_FEATURE_STEREO, nullptr };
 
 constexpr clap_id kMainInputPortId = 0;
 constexpr clap_id kMainOutputPortId = 1;
@@ -96,7 +97,7 @@ bool Plugin::init() {
     mOscPort = std::make_unique<OscPort>([this](std::string_view packet) { return mWatcher.observe(packet); });
     mOutbox = std::make_unique<SclangOutbox>();
     mCode = std::make_unique<CodeController>(defaultCode(), codeHooks());
-    mGui = std::make_unique<PluginGui>(mHost, mHostTimer, mHostFd, editorActions(), mPostLog);
+    mGui = std::make_unique<PluginGui>(mHost, mHostTimer, mHostFd, editorActions(), mPostLog, loadExamples(pluginResourcesDir() / "examples"));
     mGui->setCode(mCode->code());
     mGui->setStatus(mCode->status());
     startSclang();
@@ -134,6 +135,7 @@ bool Plugin::activate(double sampleRate, uint32_t maxFrames) {
     mSilence.assign(maxFrames, 0.f);
     mEngine = std::move(engine);
     mTransport = std::make_unique<TransportFollower>(sampleRate);
+    mTransportBuses = std::make_unique<TransportBuses>(sampleRate, ParameterBank::kCount);
     mOscPort->attach(mEngine.get());
     if (mSclang)
         mSclang->serverStarted();
@@ -145,6 +147,7 @@ void Plugin::deactivate() {
     mOscPort->attach(nullptr);
     mEngine.reset();
     mTransport.reset();
+    mTransportBuses.reset();
     mReleaseHeldNotes = true;
     if (mSclang)
         mSclang->serverStopped();
@@ -262,7 +265,8 @@ clap_process_status Plugin::process(const clap_process* process) {
     MidiOutput midiOutput(mHeldNotes, process->out_events);
     if (std::exchange(mReleaseHeldNotes, false))
         midiOutput.releaseHeldNotes(0);
-    mEngine->process(inputs, outputs, process->frames_count, parameterEvents, midiOutput);
+    mTransportBuses->follow(process->transport, process->frames_count);
+    mEngine->process(inputs, outputs, process->frames_count, { &parameterEvents, mTransportBuses.get() }, midiOutput);
     parameterEvents.applyAll();
     if (const auto transport = mTransport->follow(process->transport, mEngine->oscTimeAtFrame(0), process->frames_count))
         mOutbox->post(*transport);

@@ -55,8 +55,13 @@ const clap_plugin_posix_fd_support PluginGui::kPosixFdExtension = {
 };
 
 PluginGui::PluginGui(const clap_host* host, const clap_host_timer_support* hostTimer, const clap_host_posix_fd_support* hostFd,
-    EditorActions actions, const PostLog& postLog):
-    mHost(host), mHostTimer(hostTimer), mHostFd(hostFd), mWidth(kDefaultWidth), mHeight(kDefaultHeight), mView(std::move(actions), postLog) {}
+    EditorActions actions, const PostLog& postLog, std::vector<Example> examples):
+    mHost(host),
+    mHostTimer(hostTimer),
+    mHostFd(hostFd),
+    mWidth(kDefaultWidth),
+    mHeight(kDefaultHeight),
+    mView(std::move(actions), postLog, std::move(examples)) {}
 
 PluginGui::~PluginGui() { destroy(); }
 

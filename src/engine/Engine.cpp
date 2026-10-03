@@ -67,7 +67,7 @@ Engine::~Engine() {
     mOutput.drain();
 }
 
-void Engine::process(const float* const* inputs, float* const* outputs, uint32_t numFrames, ControlSource& controls, MidiSink& midi) {
+void Engine::process(const float* const* inputs, float* const* outputs, uint32_t numFrames, std::initializer_list<ControlSource*> controls, MidiSink& midi) {
     ServerOutput::Scope output(mOutput, ServerOutput::Thread::realtime);
     // Before BeginCallback, so the first drain binds the NRT thread before any async command stage runs there.
     if (mOutput.takeDrainRequest())
@@ -83,7 +83,8 @@ void Engine::process(const float* const* inputs, float* const* outputs, uint32_t
         mStagePos += n;
         if (mStagePos < kBlockSize)
             continue;
-        controls.writeControls(done, mWorld->mControlBus, mWorld->mNumControlBusChannels);
+        for (ControlSource* source : controls)
+            source->writeControls(done, mWorld->mControlBus, mWorld->mNumControlBusChannels);
         mDriver->RunBlock(mInStagePtrs.data(), mNumInputs, mOutStagePtrs.data(), mNumOutputs);
         writeBlockMidi(done, numFrames, midi);
         mStagePos = 0;

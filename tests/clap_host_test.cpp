@@ -3,6 +3,8 @@
 #include <clap/clap.h>
 
 #include <dlfcn.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <atomic>
@@ -14,6 +16,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <iterator>
 #include <string>
 #include <thread>
 #include <utility>
@@ -262,6 +265,24 @@ public:
         return false;
     }
 
+    bool waitForSignal(const std::function<bool(const std::vector<float>&)>& matches) {
+        const auto deadline = std::chrono::steady_clock::now() + kSclangStartTimeout;
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (matches(runSilence(0.05, kMaxFrames)))
+                return true;
+        }
+        return false;
+    }
+
+    bool waitForPeakAbove(float level) {
+        const auto deadline = std::chrono::steady_clock::now() + kSclangStartTimeout;
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (peak(runSilence(0.05, kMaxFrames)) > level)
+                return true;
+        }
+        return false;
+    }
+
     bool waitForSilence() {
         const std::vector<float> silence(kMaxFrames, 0.f);
         const auto deadline = std::chrono::steady_clock::now() + kSclangStartTimeout;
@@ -273,13 +294,14 @@ public:
         return false;
     }
 
-    std::vector<float> runRealtime(double seconds) {
-        const std::vector<float> silence(kMaxFrames, 0.f);
-        std::vector<float> left(static_cast<size_t>(seconds * mSampleRate)), right(left.size());
+    std::vector<float> runRealtime(double seconds) { return runRealtime(std::vector<float>(static_cast<size_t>(seconds * mSampleRate), 0.f)); }
+
+    std::vector<float> runRealtime(const std::vector<float>& input) {
+        std::vector<float> left(input.size()), right(input.size());
         auto next = std::chrono::steady_clock::now();
         for (size_t offset = 0; offset < left.size(); offset += kMaxFrames) {
             const uint32_t frames = std::min<size_t>(kMaxFrames, left.size() - offset);
-            processCall(silence.data(), left.data() + offset, right.data() + offset, frames);
+            processCall(input.data() + offset, left.data() + offset, right.data() + offset, frames);
             pumpMainThread();
             next += std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(frames / mSampleRate));
             std::this_thread::sleep_until(next);
@@ -288,6 +310,11 @@ public:
     }
 
     void useTransport(HostTransport& transport) { mTransport = &transport; }
+
+    void idle(double seconds) {
+        std::this_thread::sleep_for(std::chrono::duration<double>(seconds));
+        pumpMainThread();
+    }
 
     std::vector<float> runSilence(double seconds, uint32_t framesPerCall) {
         return run(std::vector<float>(static_cast<size_t>(seconds * mSampleRate), 0.f), framesPerCall);
@@ -552,6 +579,68 @@ void testInstrumentPassesNoteDetails(const clap_plugin_factory* factory) {
     check(std::fabs(frequency - 880.0) <= 4.0, "the instrument passes midinote, velocity and chan to each synth");
 }
 
+void testInstrumentBendsPitch(const clap_plugin_factory* factory) {
+    Instance instance(factory, 48000.0);
+    instance.waitForSound();
+    instance.loadState(supercollidaw::encodeState({ "SuperColliDAW.instrument { |freq, bend, amp| SinOsc.ar(freq * bend.midiratio, 0, amp * 0.1) };\n", "", {} }));
+    instance.waitForSilence();
+    instance.waitForSound([&] { instance.sendMidi(0x90, 69, 127); });
+    instance.sendMidi(0xE0, 0x7F, 0x7F);
+    const double bent = instance.waitForFrequency(493.88);
+    instance.sendMidi(0x80, 69, 0);
+    instance.waitForSilence();
+    instance.sendMidi(0x90, 57, 127);
+    const double started = instance.waitForFrequency(246.94);
+    std::printf("  note 69 bent fully up: %.2f Hz, note 57 started while bent: %.2f Hz\n", bent, started);
+    check(std::fabs(bent - 493.88) <= 4.0, "pitch bend reaches the playing voice as bend, two semitones by default");
+    check(std::fabs(started - 246.94) <= 4.0, "a note started while the wheel is bent starts bent");
+}
+
+void testInstrumentSustainPedal(const clap_plugin_factory* factory) {
+    Instance instance(factory, 48000.0);
+    instance.waitForSound();
+    instance.loadState(supercollidaw::encodeState({ "SuperColliDAW.instrument { |freq, amp| SinOsc.ar(freq, 0, amp * 0.1) };\n", "", {} }));
+    instance.waitForSilence();
+    instance.waitForSound([&] { instance.sendMidi(0x90, 69, 127); });
+    instance.sendMidi(0xB0, 64, 127);
+    instance.runSilence(0.2, kMaxFrames);
+    instance.sendMidi(0x80, 69, 0);
+    instance.runSilence(1.0, kMaxFrames);
+    const float sustained = Instance::peak(instance.runSilence(0.2, kMaxFrames));
+    instance.sendMidi(0xB0, 64, 0);
+    const bool released = instance.waitForSilence();
+    std::printf("  1 s after the note-off with the pedal down: peak %.3f\n", sustained);
+    check(sustained > kTestSineAmp * 0.5f, "the sustain pedal holds a released note");
+    check(released, "lifting the pedal releases it");
+}
+
+void testInstrumentMode(const clap_plugin_factory* factory, const std::string& mode, bool glides) {
+    const std::string code = "~ready = { SinOsc.ar(660, 0, 0.1) }.play;\n"
+                             "MIDIdef.cc(\\ready, { ~ready.release }, 1);\n"
+                             "SuperColliDAW.instrument { |freq, amp| SinOsc.ar(freq, 0, amp * 0.1 * Line.kr(0, 1, 4)) }.mode_(" + mode + ");\n";
+    Instance instance(factory, 48000.0);
+    instance.waitForSound();
+    instance.loadState(supercollidaw::encodeState({ code, "", {} }));
+    instance.waitForFrequency(660.0);
+    instance.sendMidi(0xB0, 1, 127);
+    instance.waitForSilence();
+    instance.sendMidi(0x90, 69, 127);
+    instance.waitForFrequency(440.0);
+    instance.runSilence(4.5, kMaxFrames);
+    instance.sendMidi(0x90, 81, 127);
+    const double newest = instance.waitForFrequency(880.0);
+    const float newestPeak = Instance::peak(instance.runSilence(0.2, kMaxFrames));
+    instance.sendMidi(0x80, 81, 0);
+    const double back = instance.waitForFrequency(440.0);
+    instance.sendMidi(0x80, 69, 0);
+    const bool silent = instance.waitForSilence();
+    std::printf("  %s: newest key %.2f Hz at peak %.3f, %.2f Hz after releasing it\n", mode.c_str(), newest, newestPeak, back);
+    check(std::fabs(newest - 880.0) <= 4.0, "a mono instrument plays only the newest held key");
+    check(glides ? newestPeak > 0.08f : newestPeak < 0.05f, glides ? "legato changes the pitch of the playing synth" : "mono restarts the synth for each key");
+    check(std::fabs(back - 440.0) <= 4.0, "releasing the newest key goes back to the key still held");
+    check(silent, "releasing the last key releases the voice");
+}
+
 std::vector<size_t> clickFrames(const std::vector<float>& signal) {
     std::vector<size_t> frames;
     for (size_t frame = 1; frame < signal.size(); ++frame) {
@@ -689,6 +778,164 @@ void testReactivationReleasesHeldMidiNotes(const clap_plugin_factory* factory) {
     check(released, "the first process after a reactivation releases notes the old server left on");
 }
 
+size_t nonFiniteSamples(const std::vector<float>& signal) { return std::ranges::count_if(signal, [](float sample) { return !std::isfinite(sample); }); }
+
+void testBrokenSynthStaysInsideThePlugin(const clap_plugin_factory* factory) {
+    Instance instance(factory, 48000.0);
+    instance.waitForSound();
+    instance.loadState(supercollidaw::encodeState({ "{ SinOsc.ar(220) * 100 }.play;\n", "", {} }));
+    instance.waitForPeakAbove(1.0f);
+    const float loudPeak = Instance::peak(instance.runSilence(0.5, kMaxFrames));
+    std::printf("  sine at amplitude 100: peak %.3f\n", loudPeak);
+    check(loudPeak > 1.2f && loudPeak <= 1.26f, "output is clipped at the server's safety clip threshold, 1.26 by default");
+
+    instance.loadState(supercollidaw::encodeState({ "{ RLPF.ar(Saw.ar(110), In.kr(0).linexp(0, 1, 0, 4000)) * 0.1 + SinOsc.ar(660, 0, 0.1) }.play;\n", "", {} }));
+    instance.waitForFrequency(660.0);
+    instance.setParameter(0, 0.5);
+    instance.runSilence(0.2, kMaxFrames);
+    const std::vector<float> broken = instance.runSilence(0.5, kMaxFrames);
+    std::printf("  filter with a NaN cutoff: %zu non-finite samples\n", nonFiniteSamples(broken));
+    check(nonFiniteSamples(broken) == 0, "a synth that outputs NaN does not send NaN to the host");
+
+    instance.loadState(supercollidaw::encodeState({ sineCode(kTestSineHz), "", {} }));
+    const double frequency = instance.waitForFrequency(kTestSineHz);
+    std::printf("  after Run all with a plain sine: %.2f Hz\n", frequency);
+    check(std::fabs(frequency - kTestSineHz) <= 4.0, "Run all brings the sound back after a synth blew up");
+}
+
+class StderrCapture {
+public:
+    explicit StderrCapture(const std::filesystem::path& path): mSaved(dup(STDERR_FILENO)) {
+        std::fflush(stderr);
+        const int file = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        dup2(file, STDERR_FILENO);
+        close(file);
+    }
+
+    ~StderrCapture() {
+        std::fflush(stderr);
+        dup2(mSaved, STDERR_FILENO);
+        close(mSaved);
+    }
+
+private:
+    int mSaved;
+};
+
+std::string readFile(const std::filesystem::path& path) {
+    std::ifstream file(path, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+}
+
+size_t firstError(const std::string& log) { return std::min(log.find("ERROR"), log.find("FAILURE IN SERVER")); }
+
+bool waitForSoundOrNotes(Instance& instance) {
+    std::vector<float> input(kMaxFrames * 10);
+    for (size_t frame = 0; frame < input.size(); ++frame)
+        input[frame] = 0.1f * static_cast<float>(std::sin(2.0 * M_PI * 330.0 * frame / instance.sampleRate()));
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+    while (std::chrono::steady_clock::now() < deadline) {
+        instance.sendMidi(0x90, 60, 100);
+        const float level = Instance::peak(instance.runRealtime(input));
+        const std::vector<OutputMidi> midi = instance.takeMidiOut();
+        if (level > 0.01f || std::ranges::any_of(midi, [](const OutputMidi& m) { return (m.status & 0xF0) == 0x90; }))
+            return true;
+    }
+    return false;
+}
+
+void testExampleRuns(const clap_plugin_factory* factory, const std::filesystem::path& example) {
+    const std::filesystem::path logPath = gCodeFile.parent_path() / "example.log";
+    bool active = false;
+    {
+        StderrCapture capture(logPath);
+        HostTransport transport;
+        transport.playing = true;
+        Instance instance(factory, 48000.0);
+        instance.useTransport(transport);
+        instance.loadState(supercollidaw::encodeState({ readFile(example), "", {} }));
+        active = waitForSoundOrNotes(instance);
+    }
+    const std::string log = readFile(logPath);
+    const bool clean = firstError(log) == std::string::npos;
+    std::printf("  %s: %s, %s\n", example.filename().c_str(), active ? "sound or notes" : "nothing", clean ? "no errors" : "errors in the post window:");
+    if (!clean)
+        std::printf("%s\n", log.substr(firstError(log), 1200).c_str());
+    check(active && clean, ("example " + example.filename().string() + " runs without errors and makes sound or notes").c_str());
+}
+
+void testExamplesRun(const clap_plugin_factory* factory, const std::filesystem::path& examplesDir) {
+    std::vector<std::filesystem::path> examples;
+    for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(examplesDir))
+        examples.push_back(entry.path());
+    std::ranges::sort(examples);
+    check(!examples.empty(), "examples are installed next to the plugin");
+    std::ofstream(gCodeFile) << "// silent\n";
+    for (const std::filesystem::path& example : examples)
+        testExampleRuns(factory, example);
+    writeCode(kTestSineHz);
+}
+
+size_t occurrences(const std::string& text, const std::string& pattern) {
+    size_t count = 0;
+    for (size_t at = text.find(pattern); at != std::string::npos; at = text.find(pattern, at + 1))
+        ++count;
+    return count;
+}
+
+void testUnprocessedInstanceRecovers(const clap_plugin_factory* factory) {
+    const std::filesystem::path logPath = gCodeFile.parent_path() / "unprocessed.log";
+    double frequency = 0.0;
+    {
+        StderrCapture capture(logPath);
+        Instance instance(factory, 48000.0);
+        instance.idle(20.0);
+        frequency = instance.waitForFrequency(kTestSineHz);
+    }
+    const size_t refused = occurrences(readFile(logPath), "/notify : already registered");
+    std::printf("  after 20 s activated but not processed: %zu refused /notify requests, then %.2f Hz\n", refused, frequency);
+    check(refused == 0, "sclang does not flood the server when the host resumes processing an instance it left activated");
+    check(std::fabs(frequency - kTestSineHz) <= 4.0, "the code runs once the host resumes processing");
+}
+
+// The output carries SuperColliDAW.beats / 1000 as DC, and output frame n plays the input frame n - kLatency.
+double worstBeatsError(const std::vector<float>& signal, double startBeats, double tempo, double sampleRate) {
+    double worst = 0.0;
+    for (size_t frame = 3 * kLatency; frame < signal.size(); ++frame) {
+        const double expected = startBeats + (static_cast<double>(frame) - kLatency) / sampleRate * tempo / 60.0;
+        worst = std::max(worst, std::fabs(signal[frame] * 1000.0 - expected));
+    }
+    return worst;
+}
+
+void testTransportUGens(const clap_plugin_factory* factory) {
+    HostTransport transport;
+    transport.playing = true;
+    transport.songBeats = 100.0;
+    Instance instance(factory, 48000.0);
+    instance.useTransport(transport);
+    instance.waitForSound();
+    instance.loadState(supercollidaw::encodeState({ "{ SinOsc.ar(SuperColliDAW.bpm * 4, 0, 0.1) }.play;\n", "", {} }));
+    const double at120 = instance.waitForFrequency(480.0);
+    transport.tempo = 90.0;
+    const double at90 = instance.waitForFrequency(360.0);
+    std::printf("  SinOsc.ar(SuperColliDAW.bpm * 4): %.2f Hz at 120 bpm, %.2f Hz at 90 bpm\n", at120, at90);
+    check(std::fabs(at120 - 480.0) <= 4.0 && std::fabs(at90 - 360.0) <= 4.0, "SuperColliDAW.bpm follows the DAW's tempo");
+
+    instance.loadState(supercollidaw::encodeState({ "{ K2A.ar(SuperColliDAW.beats / 1000) }.play;\n", "", {} }));
+    instance.waitForSignal([](const std::vector<float>& signal) { return std::ranges::all_of(signal, [](float sample) { return sample > 0.05f; }); });
+    const double playingError = worstBeatsError(instance.runSilence(1.0, kMaxFrames), transport.songBeats, 90.0, 48000.0);
+    transport.playing = false;
+    const double stoppedError = worstBeatsError(instance.runSilence(1.0, kMaxFrames), transport.songBeats, 90.0, 48000.0);
+    transport.playing = true;
+    transport.songBeats = 200.0;
+    const double relocatedError = worstBeatsError(instance.runSilence(1.0, kMaxFrames), 200.0, 90.0, 48000.0);
+    std::printf("  SuperColliDAW.beats worst error: %.4f beats playing, %.4f stopped, %.4f after jumping to beat 200\n", playingError, stoppedError, relocatedError);
+    check(playingError < 0.01, "SuperColliDAW.beats is the DAW's position while it plays");
+    check(stoppedError < 0.01, "SuperColliDAW.beats keeps counting at the DAW's tempo while it is stopped");
+    check(relocatedError < 0.01, "SuperColliDAW.beats jumps with the DAW when it relocates");
+}
+
 void testParameters(const clap_plugin_factory* factory) {
     const std::string code = "{ SinOsc.ar(SuperColliDAW.kr(0, \\pitch, [200, 800, \\exp]), 0, 0.1 * (1 - (In.kr(5) * 0.001))) }.play;\n"
                              "s.bind { { SuperColliDAW.kr(2, \\bundled); Silent.ar }.play };\n";
@@ -755,19 +1002,26 @@ int main(int argc, char** argv) {
     testStateRestoresCode(factory);
     testLinkedFileRerunsWhenSaved(factory);
     testReactivationKeepsServerNotifications(factory);
+    testUnprocessedInstanceRecovers(factory);
     testStuckSclangDoesNotBlockTheHost(factory);
     testTrackMidiReachesMIDIdef(factory);
     testInstrumentPlaysTrackNotes(factory);
     testInstrumentPassesNoteDetails(factory);
+    testInstrumentBendsPitch(factory);
+    testInstrumentSustainPedal(factory);
+    testInstrumentMode(factory, "\\mono", false);
+    testInstrumentMode(factory, "\\legato", true);
     testClockFollowsTransport(factory);
+    testTransportUGens(factory);
     testPatternMidiReachesTheTrack(factory);
     testRunAllReleasesHeldMidiNotes(factory);
     testReactivationReleasesHeldMidiNotes(factory);
+    testBrokenSynthStaysInsideThePlugin(factory);
     testParameters(factory);
+    testExamplesRun(factory, std::filesystem::path(argv[1]).parent_path() / "SuperColliDAW" / "examples");
     entry->deinit();
 
     check(entry->init(argv[1]), "clap_entry initialises again after deinit");
-    testSineFollowsHostSampleRate(factory, 48000.0);
     entry->deinit();
     std::filesystem::remove_all(userDir);
     std::printf("%d failure(s)\n", gFailures);

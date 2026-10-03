@@ -7,6 +7,7 @@
 #include "SC_Reply.h"
 
 #include <cstdint>
+#include <initializer_list>
 #include <string>
 #include <vector>
 
@@ -49,7 +50,7 @@ public:
 
     bool isRunning() const { return mWorld != nullptr; }
 
-    void process(const float* const* inputs, float* const* outputs, uint32_t numFrames, ControlSource& controls, MidiSink& midi);
+    void process(const float* const* inputs, float* const* outputs, uint32_t numFrames, std::initializer_list<ControlSource*> controls, MidiSink& midi);
     bool sendPacket(char* data, int size, ReplyFunc replyFunc, void* replyContext);
     int64_t oscTimeAtFrame(uint32_t frame) const { return mClock.oscTimeAt(mCallbackStart + frame); }
 

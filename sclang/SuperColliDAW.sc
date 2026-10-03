@@ -1,9 +1,10 @@
 SuperColliDAW {
-	classvar <server, <clock, <pluginAddr;
+	classvar <server, <clock, <pluginAddr, numParameters;
 
 	*initClass {
 		var port = "SUPERCOLLIDAW_SERVER_PORT".getenv;
 		if(port.isNil) { ^this };
+		numParameters = this.prEnvInteger("SUPERCOLLIDAW_NUM_PARAMETERS", 0);
 		Class.initClassTree(Server);
 		server = SuperColliDAWServer(\supercollidaw, NetAddr("127.0.0.1", port.asInteger), this.prServerOptions);
 		// Its own NetAddr, because inside Server:makeBundle (s.bind) server.addr collects messages into the bundle.
@@ -58,6 +59,15 @@ SuperColliDAW {
 		if(server.serverRunning) { function.value } { server.doWhenBooted(function) };
 	}
 
+	// The plugin writes the DAW's tempo and beat position to the two control buses after the parameters.
+	*bpm {
+		^In.kr(numParameters)
+	}
+
+	*beats {
+		^In.kr(numParameters + 1)
+	}
+
 	*kr { |index, name, spec|
 		spec = this.prSpec(spec, name);
 		this.declare(index, name, spec);
@@ -81,7 +91,7 @@ SuperColliDAW {
 		^ServerOptions.new
 			.numInputBusChannels_(this.prEnvInteger("SUPERCOLLIDAW_NUM_INPUTS", 2))
 			.numOutputBusChannels_(this.prEnvInteger("SUPERCOLLIDAW_NUM_OUTPUTS", 2))
-			.reservedNumControlBusChannels_(this.prEnvInteger("SUPERCOLLIDAW_NUM_PARAMETERS", 0))
+			.reservedNumControlBusChannels_(numParameters + 2)
 	}
 
 	*prEnvInteger { |name, default|

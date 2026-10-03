@@ -34,6 +34,8 @@ OscPort::~OscPort() {
 void OscPort::attach(Engine* engine) {
     std::lock_guard lock(mEngineMutex);
     mEngine = engine;
+    for (const auto& [endpoint, client] : mClients)
+        client->statusPending = false;
 }
 
 void OscPort::startReceive() {
@@ -54,8 +56,15 @@ void OscPort::handlePacket(size_t size) {
         return;
     }
     std::lock_guard lock(mEngineMutex);
-    if (mEngine)
-        mEngine->sendPacket(mBuffer.data(), static_cast<int>(size), reply, clientFor(mSender));
+    if (!mEngine)
+        return;
+    Client* client = clientFor(mSender);
+    const bool status = isCommand(mBuffer.data(), size, "/status");
+    // A host can keep the plugin activated without processing it, and answering every poll queued meanwhile floods sclang.
+    if (status && client->statusPending.exchange(true))
+        return;
+    if (!mEngine->sendPacket(mBuffer.data(), static_cast<int>(size), reply, client) && status)
+        client->statusPending = false;
 }
 
 void OscPort::refuse(const char* command, const char* reason) {
@@ -74,12 +83,14 @@ void OscPort::refuse(const char* command, const char* reason) {
 OscPort::Client* OscPort::clientFor(const udp::endpoint& endpoint) {
     std::unique_ptr<Client>& client = mClients[endpoint];
     if (!client)
-        client = std::make_unique<Client>(Client{ this, endpoint });
+        client = std::make_unique<Client>(this, endpoint);
     return client.get();
 }
 
 void OscPort::reply(ReplyAddress* address, char* data, int size) {
-    const Client* client = static_cast<const Client*>(address->mReplyData);
+    Client* client = static_cast<Client*>(address->mReplyData);
+    if (isCommand(data, static_cast<size_t>(size), "/status.reply"))
+        client->statusPending = false;
     boost::system::error_code ignored;
     client->owner->mSocket.send_to(asio::buffer(data, size), client->endpoint, 0, ignored);
 }

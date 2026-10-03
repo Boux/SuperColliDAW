@@ -1,16 +1,15 @@
 #include "TransportFollower.h"
 
+#include "ClapTransport.h"
+
 #include <cmath>
 
 namespace supercollidaw {
 
 namespace {
 
-constexpr uint32_t kRequiredFlags = CLAP_TRANSPORT_HAS_TEMPO | CLAP_TRANSPORT_HAS_BEATS_TIMELINE;
 constexpr double kResendSeconds = 0.05;
 constexpr double kJumpBeats = 0.001;
-
-double beats(clap_beattime time) { return static_cast<double>(time) / CLAP_BEATTIME_FACTOR; }
 
 double beatsPerBar(const clap_event_transport& transport) {
     const bool hasSignature = (transport.flags & CLAP_TRANSPORT_HAS_TIME_SIGNATURE) && transport.tsig_denom > 0;
@@ -25,7 +24,7 @@ TransportMessage messageFrom(const clap_event_transport& transport, int64_t oscT
 }
 
 std::optional<TransportMessage> TransportFollower::follow(const clap_event_transport* transport, int64_t oscTime, uint32_t frames) {
-    if (!transport || (transport->flags & kRequiredFlags) != kRequiredFlags)
+    if (!hasTimeline(transport))
         return std::nullopt;
     const TransportMessage current = messageFrom(*transport, oscTime);
     const bool send = changed(current) || mSamplesSinceSent >= mSampleRate * kResendSeconds;

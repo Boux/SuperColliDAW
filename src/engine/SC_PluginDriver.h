@@ -29,6 +29,7 @@ protected:
 
 private:
     void PerformScheduledBundles(int64 nextTime);
+    void CopySafely(float* output, const float* bus, int numFrames) const;
     void DropMidi();
 
     std::vector<BlockMidi> mMidiOut;

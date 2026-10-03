@@ -4,6 +4,7 @@
 #include <boost/asio/ip/udp.hpp>
 
 #include <array>
+#include <atomic>
 #include <functional>
 #include <map>
 #include <memory>
@@ -33,6 +34,7 @@ private:
     struct Client {
         OscPort* owner;
         boost::asio::ip::udp::endpoint endpoint;
+        std::atomic<bool> statusPending = false;
     };
 
     static void reply(ReplyAddress* address, char* data, int size);

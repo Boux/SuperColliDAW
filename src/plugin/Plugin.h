@@ -10,6 +10,7 @@
 #include "midi/MidiOutput.h"
 #include "params/ParameterBank.h"
 #include "params/ParameterWatcher.h"
+#include "transport/TransportBuses.h"
 #include "transport/TransportFollower.h"
 
 #include <clap/clap.h>
@@ -88,6 +89,7 @@ private:
     std::unique_ptr<PluginGui> mGui;
     std::unique_ptr<Engine> mEngine;
     std::unique_ptr<TransportFollower> mTransport;
+    std::unique_ptr<TransportBuses> mTransportBuses;
     HeldNotes mHeldNotes{};
     bool mReleaseHeldNotes = false;
     std::vector<float> mSilence;

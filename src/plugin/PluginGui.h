@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace supercollidaw {
 
@@ -17,7 +18,7 @@ public:
     static const clap_plugin_posix_fd_support kPosixFdExtension;
 
     PluginGui(const clap_host* host, const clap_host_timer_support* hostTimer, const clap_host_posix_fd_support* hostFd, EditorActions actions,
-        const PostLog& postLog);
+        const PostLog& postLog, std::vector<Example> examples);
     ~PluginGui();
     PluginGui(const PluginGui&) = delete;
     PluginGui& operator=(const PluginGui&) = delete;

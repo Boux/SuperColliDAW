@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
 
 void sc_SetDenormalFlags();
 
@@ -82,7 +83,7 @@ void SC_PluginDriver::RunBlock(const float* const* inputs, int numInputs, float*
     const int32* outTouched = world->mAudioBusTouched;
     for (int k = 0; k < outCount; ++k) {
         if (outTouched[k] == bufCounter)
-            std::memcpy(outputs[k], outBuses + k * bufFrames, bufFrames * sizeof(float));
+            CopySafely(outputs[k], outBuses + k * bufFrames, bufFrames);
         else
             std::memset(outputs[k], 0, bufFrames * sizeof(float));
     }
@@ -91,6 +92,13 @@ void SC_PluginDriver::RunBlock(const float* const* inputs, int numInputs, float*
 
     world->mBufCounter++;
     mOSCbuftime = nextTime;
+}
+
+// NaN or inf would stay in the state of every filter after the plugin, so they never leave the server.
+void SC_PluginDriver::CopySafely(float* output, const float* bus, int numFrames) const {
+    const bool clips = mSafetyClipThreshold > 0.f && std::isfinite(mSafetyClipThreshold);
+    const float threshold = clips ? mSafetyClipThreshold : std::numeric_limits<float>::max();
+    std::transform(bus, bus + numFrames, output, [threshold](float sample) { return std::isfinite(sample) ? std::clamp(sample, -threshold, threshold) : 0.f; });
 }
 
 void SC_PluginDriver::PerformScheduledBundles(int64 nextTime) {

@@ -26,6 +26,7 @@ add_library(supercollidaw_ui OBJECT
     ui/CodeRegion.cpp
     ui/EditorView.cpp
     ui/EditorWindow.cpp
+    ui/ExamplesPanel.cpp
     ui/PostWindow.cpp
     ui/PuglClipboard.cpp
     ui/PuglImGuiInput.cpp
@@ -43,6 +44,7 @@ add_library(supercollidaw_clap MODULE
     plugin/code/CodeController.cpp
     plugin/code/CodeDocument.cpp
     plugin/code/DefaultCode.cpp
+    plugin/code/Examples.cpp
     plugin/code/FileDialog.cpp
     plugin/code/LinkedFile.cpp
     plugin/midi/MidiInput.cpp
@@ -54,6 +56,7 @@ add_library(supercollidaw_clap MODULE
     plugin/params/ParameterWatcher.cpp
     plugin/state/ClapStreams.cpp
     plugin/state/PluginState.cpp
+    plugin/transport/TransportBuses.cpp
     plugin/transport/TransportFollower.cpp
 )
 embed_binary(supercollidaw_clap supercollidaw_default_scd ${CMAKE_SOURCE_DIR}/assets/default.scd)
@@ -63,19 +66,5 @@ set_target_properties(supercollidaw_clap PROPERTIES OUTPUT_NAME SuperColliDAW PR
 if(UNIX AND NOT APPLE)
     target_link_options(supercollidaw_clap PRIVATE -Wl,--no-undefined -Wl,--exclude-libs,ALL)
 endif()
-file(GLOB_RECURSE SCLANG_CLASSES CONFIGURE_DEPENDS RELATIVE ${CMAKE_SOURCE_DIR}/sclang ${CMAKE_SOURCE_DIR}/sclang/*.sc)
-set(SCLANG_CLASSES_DIR ${CMAKE_CURRENT_BINARY_DIR}/SuperColliDAW/classes)
-set(SCLANG_CLASS_COPIES)
-foreach(class ${SCLANG_CLASSES})
-    get_filename_component(dir ${SCLANG_CLASSES_DIR}/${class} DIRECTORY)
-    add_custom_command(
-        OUTPUT ${SCLANG_CLASSES_DIR}/${class}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${dir}
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/sclang/${class} ${SCLANG_CLASSES_DIR}/${class}
-        DEPENDS ${CMAKE_SOURCE_DIR}/sclang/${class}
-        VERBATIM
-    )
-    list(APPEND SCLANG_CLASS_COPIES ${SCLANG_CLASSES_DIR}/${class})
-endforeach()
-add_custom_target(supercollidaw_sclang_classes ALL DEPENDS ${SCLANG_CLASS_COPIES})
-add_dependencies(supercollidaw_clap supercollidaw_sclang_classes)
+copy_resources(supercollidaw_clap ${CMAKE_SOURCE_DIR}/sclang *.sc ${CMAKE_CURRENT_BINARY_DIR}/SuperColliDAW/classes)
+copy_resources(supercollidaw_clap ${CMAKE_SOURCE_DIR}/assets/examples *.scd ${CMAKE_CURRENT_BINARY_DIR}/SuperColliDAW/examples)
