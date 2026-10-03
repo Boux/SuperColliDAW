@@ -1,5 +1,7 @@
 // Simple synth
-// Ctrl+Enter: run block, Shift+Enter: run line, Ctrl+.: stop
+//
+// Ctrl+Enter runs the block under the cursor, Shift+Enter the line
+// Ctrl+. stops all sound
 
 { SinOsc.ar([220, 221], 0, 0.1) }.play;
 

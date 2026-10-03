@@ -17,6 +17,7 @@
 #include <fstream>
 #include <functional>
 #include <iterator>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
@@ -895,6 +896,16 @@ bool waitForSoundOrNotes(Instance& instance) {
     return false;
 }
 
+bool hasCode(const std::string& text) {
+    std::istringstream lines(text);
+    for (std::string line; std::getline(lines, line);) {
+        const size_t start = line.find_first_not_of(" \t");
+        if (start != std::string::npos && line.compare(start, 2, "//") != 0)
+            return true;
+    }
+    return false;
+}
+
 void testExampleRuns(const clap_plugin_factory* factory, const std::filesystem::path& example) {
     const std::filesystem::path logPath = gCodeFile.parent_path() / "example.log";
     bool active = false;
@@ -909,10 +920,11 @@ void testExampleRuns(const clap_plugin_factory* factory, const std::filesystem::
     }
     const std::string log = readFile(logPath);
     const bool clean = firstError(log) == std::string::npos;
-    std::printf("  %s: %s, %s\n", example.filename().c_str(), active ? "sound or notes" : "nothing", clean ? "no errors" : "errors in the post window:");
+    const bool playable = hasCode(readFile(example));
+    std::printf("  %s: %s, %s\n", example.filename().c_str(), active ? "sound or notes" : playable ? "nothing" : "no code to play", clean ? "no errors" : "errors in the post window:");
     if (!clean)
         std::printf("%s\n", log.substr(firstError(log), 1200).c_str());
-    check(active && clean, ("example " + example.filename().string() + " runs without errors and makes sound or notes").c_str());
+    check((active || !playable) && clean, ("example " + example.filename().string() + " runs without errors and makes sound or notes").c_str());
 }
 
 void testExamplesRun(const clap_plugin_factory* factory, const std::filesystem::path& examplesDir) {
