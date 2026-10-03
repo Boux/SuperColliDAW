@@ -4,6 +4,7 @@
 
 #include <dlfcn.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -137,6 +138,28 @@ clap_event_header eventHeader(uint16_t type, uint32_t size) {
     return { .size = size, .time = 0, .space_id = CLAP_CORE_EVENT_SPACE_ID, .type = type, .flags = 0 };
 }
 
+struct HostTransport {
+    bool playing = false;
+    double tempo = 120.0;
+    double songBeats = 0.0;
+
+    clap_event_transport event() const {
+        const double bar = std::floor(songBeats / 4.0);
+        clap_event_transport transport{};
+        transport.header = eventHeader(CLAP_EVENT_TRANSPORT, sizeof(clap_event_transport));
+        transport.flags = CLAP_TRANSPORT_HAS_TEMPO | CLAP_TRANSPORT_HAS_BEATS_TIMELINE | CLAP_TRANSPORT_HAS_TIME_SIGNATURE | (playing ? CLAP_TRANSPORT_IS_PLAYING : 0);
+        transport.song_pos_beats = std::llround(songBeats * CLAP_BEATTIME_FACTOR);
+        transport.tempo = tempo;
+        transport.bar_start = std::llround(bar * 4.0 * CLAP_BEATTIME_FACTOR);
+        transport.bar_number = static_cast<int32_t>(bar);
+        transport.tsig_num = 4;
+        transport.tsig_denom = 4;
+        return transport;
+    }
+
+    void advance(uint32_t frames, double sampleRate) { songBeats += playing ? frames / sampleRate * tempo / 60.0 : 0.0; }
+};
+
 const clap_output_events kDiscardOutputEvents = {
     .ctx = nullptr,
     .try_push = [](const clap_output_events*, const clap_event_header_t*) { return true; },
@@ -216,6 +239,22 @@ public:
         }
         return false;
     }
+
+    std::vector<float> runRealtime(double seconds) {
+        const std::vector<float> silence(kMaxFrames, 0.f);
+        std::vector<float> left(static_cast<size_t>(seconds * mSampleRate)), right(left.size());
+        auto next = std::chrono::steady_clock::now();
+        for (size_t offset = 0; offset < left.size(); offset += kMaxFrames) {
+            const uint32_t frames = std::min<size_t>(kMaxFrames, left.size() - offset);
+            processCall(silence.data(), left.data() + offset, right.data() + offset, frames);
+            pumpMainThread();
+            next += std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(frames / mSampleRate));
+            std::this_thread::sleep_until(next);
+        }
+        return left;
+    }
+
+    void useTransport(HostTransport& transport) { mTransport = &transport; }
 
     std::vector<float> runSilence(double seconds, uint32_t framesPerCall) {
         return run(std::vector<float>(static_cast<size_t>(seconds * mSampleRate), 0.f), framesPerCall);
@@ -304,10 +343,11 @@ private:
         float* outChannels[kChannels] = { outLeft, outRight };
         clap_audio_buffer input = { .data32 = inChannels, .data64 = nullptr, .channel_count = kChannels, .latency = 0, .constant_mask = 0 };
         clap_audio_buffer output = { .data32 = outChannels, .data64 = nullptr, .channel_count = kChannels, .latency = 0, .constant_mask = 0 };
+        const clap_event_transport transport = mTransport ? mTransport->event() : clap_event_transport{};
         clap_process process = {
             .steady_time = -1,
             .frames_count = frames,
-            .transport = nullptr,
+            .transport = mTransport ? &transport : nullptr,
             .audio_inputs = &input,
             .audio_outputs = &output,
             .audio_inputs_count = 1,
@@ -317,10 +357,13 @@ private:
         };
         mPlugin->process(mPlugin, &process);
         mEvents.clear();
+        if (mTransport)
+            mTransport->advance(frames, mSampleRate);
     }
 
     double mSampleRate;
     InputEvents mEvents;
+    HostTransport* mTransport = nullptr;
     const clap_plugin* mPlugin = nullptr;
     bool mActive = false;
 };
@@ -457,6 +500,75 @@ void testInstrumentPassesNoteDetails(const clap_plugin_factory* factory) {
     check(std::fabs(frequency - 880.0) <= 4.0, "the instrument passes midinote, velocity and chan to each synth");
 }
 
+std::vector<size_t> clickFrames(const std::vector<float>& signal) {
+    std::vector<size_t> frames;
+    for (size_t frame = 1; frame < signal.size(); ++frame) {
+        if (signal[frame] > 0.25f && signal[frame - 1] <= 0.25f)
+            frames.push_back(frame);
+    }
+    return frames;
+}
+
+std::vector<size_t> beatFrames(double startBeats, double tempo, int firstBeat, int lastBeat, double sampleRate) {
+    std::vector<size_t> frames;
+    for (int beat = firstBeat; beat <= lastBeat; ++beat)
+        frames.push_back(static_cast<size_t>(std::llround((beat - startBeats) * 60.0 / tempo * sampleRate)) + kLatency);
+    return frames;
+}
+
+double worstOffsetMs(const std::vector<size_t>& clicks, const std::vector<size_t>& beats, double sampleRate) {
+    double worst = 0.0;
+    for (size_t beat : beats) {
+        const auto nearest = std::min_element(clicks.begin(), clicks.end(), [beat](size_t a, size_t b) {
+            return std::llabs(static_cast<long long>(a) - static_cast<long long>(beat)) < std::llabs(static_cast<long long>(b) - static_cast<long long>(beat));
+        });
+        const double offset = nearest == clicks.end() ? 1e9 : std::llabs(static_cast<long long>(*nearest) - static_cast<long long>(beat));
+        worst = std::max(worst, offset / sampleRate * 1000.0);
+    }
+    return worst;
+}
+
+void testClockFollowsTransport(const clap_plugin_factory* factory) {
+    const std::string code = "SynthDef(\\click, { |out| OffsetOut.ar(out, Impulse.ar(0) * 0.5); Line.kr(0, 0, 0.01, doneAction: 2) }).add;\n"
+                             "~ready = { SinOsc.ar(660, 0, 0.1) }.play;\n"
+                             "SuperColliDAW.onPlay { ~ready.release; ~player = Pbind(\\instrument, \\click, \\dur, 1).play(quant: 4) };\n"
+                             "SuperColliDAW.onStop { ~player.stop; { SinOsc.ar(990, 0, 0.1) }.play };\n";
+    HostTransport transport;
+    transport.songBeats = 2.5;
+    Instance instance(factory, 48000.0);
+    instance.useTransport(transport);
+    instance.waitForSound();
+    instance.loadState(supercollidaw::encodeState({ code, "", {} }));
+    instance.waitForFrequency(660.0);
+
+    transport.playing = true;
+    const std::vector<size_t> at120 = clickFrames(instance.runRealtime(4.0));
+    transport.tempo = 150.0;
+    const std::vector<size_t> at150 = clickFrames(instance.runRealtime(3.0));
+    transport.songBeats -= 8.0;
+    const std::vector<size_t> afterLoop = clickFrames(instance.runRealtime(2.0));
+
+    const std::vector<size_t> beatsAt120 = beatFrames(2.5, 120.0, 4, 10, 48000.0);
+    const double offset120 = worstOffsetMs(at120, beatsAt120, 48000.0);
+    std::printf("  started at beat 2.5 with quant 4: first click at frame %zu, beat 4 at %zu, worst offset %.2f ms\n", at120.empty() ? 0 : at120.front(),
+        beatsAt120.front(), offset120);
+    check(!at120.empty() && at120.front() + 48 > beatsAt120.front(), "a pattern started on play waits for the next DAW bar");
+    check(offset120 < 1.0, "pattern events land on the DAW's beats at 120 bpm");
+
+    const double offset150 = worstOffsetMs(at150, beatFrames(10.5, 150.0, 12, 17, 48000.0), 48000.0);
+    std::printf("  after the DAW switches to 150 bpm: worst offset %.2f ms\n", offset150);
+    check(offset150 < 1.0, "pattern events follow a tempo change in the DAW");
+
+    const double offsetAfterLoop = worstOffsetMs(afterLoop, beatFrames(10.0, 150.0, 11, 14, 48000.0), 48000.0);
+    std::printf("  after the DAW loops back 2 bars: worst offset %.2f ms\n", offsetAfterLoop);
+    check(offsetAfterLoop < 1.0, "pattern events keep landing on the DAW's beats when it loops back");
+
+    transport.playing = false;
+    const double stoppedFrequency = instance.waitForFrequency(990.0);
+    std::printf("  after the DAW stops: %.2f Hz\n", stoppedFrequency);
+    check(std::fabs(stoppedFrequency - 990.0) <= 4.0, "SuperColliDAW.onStop runs when the DAW stops");
+}
+
 void testParameters(const clap_plugin_factory* factory) {
     const std::string code = "{ SinOsc.ar(SuperColliDAW.kr(0, \\pitch, [200, 800, \\exp]), 0, 0.1 * (1 - (In.kr(5) * 0.001))) }.play;\n"
                              "s.bind { { SuperColliDAW.kr(2, \\bundled); Silent.ar }.play };\n";
@@ -527,6 +639,7 @@ int main(int argc, char** argv) {
     testTrackMidiReachesMIDIdef(factory);
     testInstrumentPlaysTrackNotes(factory);
     testInstrumentPassesNoteDetails(factory);
+    testClockFollowsTransport(factory);
     testParameters(factory);
     entry->deinit();
 

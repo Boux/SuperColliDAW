@@ -1,5 +1,6 @@
 #pragma once
 
+#include "SampleClock.h"
 #include "ServerOutput.h"
 
 #include "SC_Reply.h"
@@ -43,6 +44,7 @@ public:
 
     void process(const float* const* inputs, float* const* outputs, uint32_t numFrames, ControlSource& controls);
     bool sendPacket(char* data, int size, ReplyFunc replyFunc, void* replyContext);
+    int64_t oscTimeAtFrame(uint32_t frame) const { return mClock.oscTimeAt(mCallbackStart + frame); }
 
 private:
     void exchange(const float* const* inputs, float* const* outputs, uint32_t offset, uint32_t numFrames);
@@ -58,6 +60,9 @@ private:
     std::vector<float*> mInStagePtrs;
     std::vector<float*> mOutStagePtrs;
     uint32_t mStagePos = 0;
+    SampleClock mClock;
+    uint64_t mSampleCount = 0;
+    uint64_t mCallbackStart = 0;
 };
 
 }

@@ -1,5 +1,5 @@
 SuperColliDAW {
-	classvar <server, pluginAddr;
+	classvar <server, <clock, pluginAddr;
 
 	*initClass {
 		var port = "SUPERCOLLIDAW_SERVER_PORT".getenv;
@@ -9,7 +9,10 @@ SuperColliDAW {
 		// Its own NetAddr, because inside Server:makeBundle (s.bind) server.addr collects messages into the bundle.
 		pluginAddr = NetAddr("127.0.0.1", port.asInteger);
 		Server.default = server;
-		StartUp.add { SuperColliDAWMIDI.receive };
+		Class.initClassTree(TempoClock);
+		clock = SuperColliDAWClock.new;
+		TempoClock.default = clock;
+		StartUp.add { SuperColliDAWMIDI.receive; clock.prListen };
 	}
 
 	*serverStarted {
@@ -33,6 +36,18 @@ SuperColliDAW {
 
 	*stop {
 		CmdPeriod.run;
+	}
+
+	*playing {
+		^clock.playing
+	}
+
+	*onPlay { |function|
+		clock.onPlay(function)
+	}
+
+	*onStop { |function|
+		clock.onStop(function)
 	}
 
 	*instrument { |synthDefOrFunction|

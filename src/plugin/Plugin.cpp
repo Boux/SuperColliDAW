@@ -3,6 +3,7 @@
 #include "PluginPaths.h"
 #include "code/DefaultCode.h"
 #include "engine/InstalledSuperCollider.h"
+#include "midi/MidiInput.h"
 #include "params/ParameterEventReader.h"
 #include "params/ParameterExtension.h"
 #include "state/ClapStreams.h"
@@ -91,7 +92,7 @@ bool Plugin::init() {
     mHostState = static_cast<const clap_host_state*>(mHost->get_extension(mHost, CLAP_EXT_STATE));
     mHostParams = static_cast<const clap_host_params*>(mHost->get_extension(mHost, CLAP_EXT_PARAMS));
     mOscPort = std::make_unique<OscPort>([this](std::string_view packet) { return mWatcher.observe(packet); });
-    mMidi = std::make_unique<MidiForwarder>();
+    mOutbox = std::make_unique<SclangOutbox>();
     mCode = std::make_unique<CodeController>(defaultCode(), codeHooks());
     mGui = std::make_unique<PluginGui>(mHost, mHostTimer, mHostFd, editorActions(), mPostLog);
     mGui->setCode(mCode->code());
@@ -115,11 +116,11 @@ void Plugin::startSclang() {
     const std::string classLibraryDir = (pluginResourcesDir() / "classes").string();
     mSclang = std::make_unique<SclangProcess>(SclangProcess::Config{ *executable, classLibraryDir, mOscPort->port(), kNumChannels,
         kNumChannels, ParameterBank::kCount, [this](const std::string& line) { post(line); } });
-    mMidi->setSclangPort(mSclang->langPort());
+    mOutbox->setSclangPort(mSclang->langPort());
 }
 
 void Plugin::stopSclang() {
-    mMidi->setSclangPort(0);
+    mOutbox->setSclangPort(0);
     mSclang.reset();
 }
 
@@ -130,6 +131,7 @@ bool Plugin::activate(double sampleRate, uint32_t maxFrames) {
         return false;
     mSilence.assign(maxFrames, 0.f);
     mEngine = std::move(engine);
+    mTransport = std::make_unique<TransportFollower>(sampleRate);
     mOscPort->attach(mEngine.get());
     if (mSclang)
         mSclang->serverStarted();
@@ -140,6 +142,7 @@ bool Plugin::activate(double sampleRate, uint32_t maxFrames) {
 void Plugin::deactivate() {
     mOscPort->attach(nullptr);
     mEngine.reset();
+    mTransport.reset();
     if (mSclang)
         mSclang->serverStopped();
 }
@@ -251,10 +254,12 @@ clap_process_status Plugin::process(const clap_process* process) {
         if (!outputs[ch])
             return CLAP_PROCESS_ERROR;
     }
-    mMidi->forward(process->in_events);
+    forwardMidi(process->in_events, *mOutbox);
     ParameterEventReader parameterEvents(mParameters, process->in_events);
     mEngine->process(inputs, outputs, process->frames_count, parameterEvents);
     parameterEvents.applyAll();
+    if (const auto transport = mTransport->follow(process->transport, mEngine->oscTimeAtFrame(0), process->frames_count))
+        mOutbox->post(*transport);
     return CLAP_PROCESS_CONTINUE;
 }
 

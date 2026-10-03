@@ -5,6 +5,7 @@ add_library(supercollidaw_engine OBJECT
     engine/Engine.cpp
     engine/InstalledSuperCollider.cpp
     engine/OscPort.cpp
+    engine/SampleClock.cpp
     engine/SC_PluginDriver.cpp
     engine/ServerOutput.cpp
     engine/SynthDefControls.cpp
@@ -14,6 +15,7 @@ target_link_libraries(supercollidaw_engine PUBLIC scsynth_embedded supercollidaw
 
 add_library(supercollidaw_lang OBJECT
     lang/PostLog.cpp
+    lang/SclangOutbox.cpp
     lang/SclangProcess.cpp
     lang/StdinWriter.cpp
 )
@@ -43,7 +45,7 @@ add_library(supercollidaw_clap MODULE
     plugin/code/DefaultCode.cpp
     plugin/code/FileDialog.cpp
     plugin/code/LinkedFile.cpp
-    plugin/midi/MidiForwarder.cpp
+    plugin/midi/MidiInput.cpp
     plugin/params/ParameterBank.cpp
     plugin/params/ParameterEventReader.cpp
     plugin/params/ParameterExtension.cpp
@@ -51,6 +53,7 @@ add_library(supercollidaw_clap MODULE
     plugin/params/ParameterWatcher.cpp
     plugin/state/ClapStreams.cpp
     plugin/state/PluginState.cpp
+    plugin/transport/TransportFollower.cpp
 )
 embed_binary(supercollidaw_clap supercollidaw_default_scd ${CMAKE_SOURCE_DIR}/assets/default.scd)
 target_include_directories(supercollidaw_clap PRIVATE ${CMAKE_SOURCE_DIR}/third_party/clap/include ${CMAKE_SOURCE_DIR}/third_party/portable-file-dialogs)

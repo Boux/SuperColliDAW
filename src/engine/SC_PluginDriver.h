@@ -6,7 +6,7 @@ class SC_PluginDriver : public SC_AudioDriver {
 public:
     explicit SC_PluginDriver(struct World* inWorld);
 
-    void BeginCallback();
+    void BeginCallback(int64 bufferTime);
     void RunBlock(const float* const* inputs, int numInputs, float* const* outputs, int numOutputs);
     void EndCallback();
 

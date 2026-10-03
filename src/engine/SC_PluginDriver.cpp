@@ -29,9 +29,9 @@ bool SC_PluginDriver::DriverSetup(int* outNumSamplesPerCallback, double* outSamp
     return true;
 }
 
-void SC_PluginDriver::BeginCallback() {
+void SC_PluginDriver::BeginCallback(int64 bufferTime) {
     sc_SetDenormalFlags();
-    mOSCbuftime = oscTimeNow();
+    mOSCbuftime = bufferTime;
     mFromEngine.Free();
     mToEngine.Perform();
     mOscPacketsToEngine.Perform();

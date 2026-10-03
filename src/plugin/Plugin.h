@@ -5,10 +5,11 @@
 #include "engine/Engine.h"
 #include "engine/OscPort.h"
 #include "lang/PostLog.h"
+#include "lang/SclangOutbox.h"
 #include "lang/SclangProcess.h"
-#include "midi/MidiForwarder.h"
 #include "params/ParameterBank.h"
 #include "params/ParameterWatcher.h"
+#include "transport/TransportFollower.h"
 
 #include <clap/clap.h>
 
@@ -80,11 +81,12 @@ private:
     ParameterBank mParameters;
     ParameterWatcher mWatcher;
     std::unique_ptr<OscPort> mOscPort;
-    std::unique_ptr<MidiForwarder> mMidi;
+    std::unique_ptr<SclangOutbox> mOutbox;
     std::unique_ptr<SclangProcess> mSclang;
     std::unique_ptr<CodeController> mCode;
     std::unique_ptr<PluginGui> mGui;
     std::unique_ptr<Engine> mEngine;
+    std::unique_ptr<TransportFollower> mTransport;
     std::vector<float> mSilence;
 };
 

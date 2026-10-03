@@ -35,7 +35,8 @@ Engine::Engine(const Config& config):
     mInStage(config.numInputs * kBlockSize, 0.f),
     mOutStage(config.numOutputs * kBlockSize, 0.f),
     mInStagePtrs(channelPointers(mInStage, config.numInputs)),
-    mOutStagePtrs(channelPointers(mOutStage, config.numOutputs)) {
+    mOutStagePtrs(channelPointers(mOutStage, config.numOutputs)),
+    mClock(config.sampleRate) {
     WorldOptions options;
     options.mNumInputBusChannels = config.numInputs;
     options.mNumOutputBusChannels = config.numOutputs;
@@ -69,7 +70,9 @@ void Engine::process(const float* const* inputs, float* const* outputs, uint32_t
     // Before BeginCallback, so the first drain binds the NRT thread before any async command stage runs there.
     if (mOutput.takeDrainRequest())
         drainOutputInNonRealtime();
-    mDriver->BeginCallback();
+    mClock.update(mSampleCount, oscTimeNow());
+    mCallbackStart = mSampleCount;
+    mDriver->BeginCallback(mClock.oscTimeAt(mSampleCount - mStagePos));
     for (uint32_t done = 0; done < numFrames;) {
         const uint32_t n = std::min(numFrames - done, kBlockSize - mStagePos);
         exchange(inputs, outputs, done, n);
@@ -82,6 +85,7 @@ void Engine::process(const float* const* inputs, float* const* outputs, uint32_t
         mStagePos = 0;
     }
     mDriver->EndCallback();
+    mSampleCount += numFrames;
 }
 
 void Engine::exchange(const float* const* inputs, float* const* outputs, uint32_t offset, uint32_t numFrames) {
