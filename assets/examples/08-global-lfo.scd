@@ -1,7 +1,4 @@
-// Global LFO
-// One LFO writes to a control bus and every voice reads it, so
-// all notes move together instead of each note starting its
-// own LFO.
+// Global LFO: one LFO on a bus, shared by every voice
 
 (
 ~lfoBus = ~lfoBus ?? { Bus.control(s, 1) };

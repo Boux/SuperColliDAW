@@ -989,7 +989,8 @@ void testTransportUGens(const clap_plugin_factory* factory) {
 
 void testParameters(const clap_plugin_factory* factory) {
     const std::string code = "{ SinOsc.ar(SuperColliDAW.kr(0, \\pitch, [200, 800, \\exp]), 0, 0.1 * (1 - (In.kr(5) * 0.001))) }.play;\n"
-                             "s.bind { { SuperColliDAW.kr(2, \\bundled); Silent.ar }.play };\n";
+                             "s.bind { { SuperColliDAW.kr(2, \\bundled); Silent.ar }.play };\n"
+                             "{ SuperColliDAW.kr(3, \\octave, 0, 3, step: 1, start: 1) + SuperColliDAW.kr(4, \\freq, high: 2000); Silent.ar }.play;\n";
     Instance instance(factory, 48000.0);
     instance.waitForSound();
     instance.loadState(supercollidaw::encodeState({ code, "", {} }));
@@ -997,6 +998,14 @@ void testParameters(const clap_plugin_factory* factory) {
     check(instance.waitForParameter(5, "In.kr(5)"), "In.kr(5) shows parameter 5");
     check(instance.waitForParameter(2, "bundled"), "SuperColliDAW.kr inside s.bind shows its parameter");
     check(instance.parameterInfo(1).flags & CLAP_PARAM_IS_HIDDEN, "unused parameters stay hidden");
+    check(instance.waitForParameter(3, "octave") && instance.waitForParameter(4, "freq"), "named arguments declare parameters");
+    char octaveText[64];
+    char freqText[64];
+    instance.params()->value_to_text(instance.clapPlugin(), 3, 0.5, octaveText, sizeof(octaveText));
+    instance.params()->value_to_text(instance.clapPlugin(), 4, 0.5, freqText, sizeof(freqText));
+    std::printf("  octave at 0.5 shows \"%s\", starts at %.4f; freq at 0.5 shows \"%s\"\n", octaveText, instance.parameterInfo(3).default_value, freqText);
+    check(std::string(octaveText) == "2" && std::fabs(instance.parameterInfo(3).default_value - 1.0 / 3.0) < 1e-6, "kr(3, \\octave, 0, 3, step: 1, start: 1) snaps to whole numbers and starts at 1");
+    check(std::string(freqText) == "200 Hz", "kr(4, \\freq, high: 2000) keeps the curve and unit of \\freq with a new top");
     std::printf("  default: %.2f Hz\n", instance.waitForFrequency(200.0));
 
     instance.setParameter(0, 1.0);

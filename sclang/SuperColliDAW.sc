@@ -68,23 +68,29 @@ SuperColliDAW {
 		^In.kr(numParameters + 1)
 	}
 
-	*kr { |index, name, spec|
-		spec = this.prSpec(spec, name);
-		this.declare(index, name, spec);
-		^spec.map(In.kr(index))
+	*kr { |number, name, low, high, curve, step, start, unit|
+		var spec = this.prSpec(name, low, high, curve, step, start, unit);
+		this.prDeclare(number, name, spec);
+		^spec.map(In.kr(number))
 	}
 
-	*declare { |index, name, spec|
-		var warp;
-		spec = this.prSpec(spec, name);
-		warp = spec.warp.asSpecifier;
-		pluginAddr.sendMsg('/supercollidaw/param', index, name.asString, spec.minval, spec.maxval,
+	*declare { |number, name, low, high, curve, step, start, unit|
+		this.prDeclare(number, name, this.prSpec(name, low, high, curve, step, start, unit));
+	}
+
+	// low can also be a whole spec: an array, a ControlSpec or a spec name. Otherwise the name's built-in spec fills what is left out.
+	*prSpec { |name, low, high, curve, step, start, unit|
+		var base;
+		if(low.notNil and: { low.isNumber.not }) { ^low.asSpec };
+		base = name.asSymbol.asSpec ?? { ControlSpec() };
+		^ControlSpec(low ? base.minval, high ? base.maxval, curve ? base.warp.asSpecifier, step ? base.step, start ? (low ? base.default), unit ? base.units)
+	}
+
+	*prDeclare { |number, name, spec|
+		var warp = spec.warp.asSpecifier;
+		pluginAddr.sendMsg('/supercollidaw/param', number, name.asString, spec.minval, spec.maxval,
 			if(warp.isNumber) { "curve" } { warp.asString }, if(warp.isNumber) { warp } { 0 },
 			spec.step, spec.default, spec.units.asString);
-	}
-
-	*prSpec { |spec, name|
-		^(spec ? name.asSymbol).asSpec ?? { ControlSpec() }
 	}
 
 	*prServerOptions {

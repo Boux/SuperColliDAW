@@ -1,7 +1,4 @@
-// DAW clock
-// Patterns play on SuperColliDAW.clock, which follows the DAW's
-// tempo, bars and position. onPlay and onStop run when the
-// DAW's transport starts and stops.
+// DAW clock: patterns follow the DAW's tempo and bars
 
 (
 SynthDef(\kick, { |out = 0, amp = 0.5|
@@ -15,27 +12,21 @@ SynthDef(\hat, { |out = 0, amp = 0.1|
     OffsetOut.ar(out, HPF.ar(WhiteNoise.ar, 8000) * env * amp ! 2);
 }).add;
 
+// runs when the DAW starts playing
 SuperColliDAW.onPlay {
-    // quant: -1 starts on the next bar line, in any meter.
+    // quant -1: start on the next bar
     ~kick = Pbind(\instrument, \kick, \dur, 1).play(quant: -1);
     ~hats = Pbind(\instrument, \hat, \dur, 0.25, \amp, Pseq([0.12, 0.04, 0.08, 0.04], inf)).play(quant: -1);
 };
 
+// runs when the DAW stops
 SuperColliDAW.onStop { ~kick.stop; ~hats.stop };
 );
 
-// Synths can lock to the DAW too. SuperColliDAW.beats is the
-// DAW's position in beats and SuperColliDAW.bpm its tempo.
-// While the DAW is stopped, beats keeps counting at its tempo.
-// This filter sweeps once per bar in 4/4, through tempo changes.
-(
-~sweep = {
-    var phase = (SuperColliDAW.beats / 4).frac * 2pi;
-    var cutoff = SinOsc.kr(0, phase).range(300, 3000);
-    RLPF.ar(Saw.ar([55, 55.2]), cutoff, 0.3) * 0.1
-}.play;
-);
-
-// Where the DAW is: SuperColliDAW.playing, and on
-// SuperColliDAW.clock: bar, beatInBar, songBeats and tempo.
+SuperColliDAW.playing.postln;
 SuperColliDAW.clock.bar.postln;
+SuperColliDAW.clock.beatInBar.postln;
+SuperColliDAW.clock.beatsPerBar.postln;
+// beats per second
+SuperColliDAW.clock.tempo.postln;
+SuperColliDAW.clock.songBeats.postln;

@@ -1,12 +1,15 @@
 // Effect on the track's audio
-// SoundIn.ar([0, 1]) is the audio coming into SuperColliDAW
-// from the track. Whatever a synth writes to Out.ar(0, ...),
-// or returns with .play, goes back out to the track.
 
 (
 {
+    // track input
     var in = SoundIn.ar([0, 1]);
-    var echoes = CombC.ar(in, 0.5, [0.25, 0.375], 3);
-    in + (echoes * 0.4)
+    // parameter 0, "mix" in the DAW
+    var mix = SuperColliDAW.kr(0, \mix, 0, 1, start: 0.3);
+    // dotted eighth at the DAW's tempo
+    var time = 60 / SuperColliDAW.bpm * 0.75;
+    var echoes = CombC.ar(in, 2, time, 3);
+    // returned audio goes to the track output
+    in + (echoes * mix)
 }.play;
 )

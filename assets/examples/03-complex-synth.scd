@@ -1,7 +1,4 @@
-// Complex synth
-// Detuned saws through a resonant filter with its own envelope
-// and a slow LFO, played as chords. Every note also sends to
-// one shared reverb on its own bus.
+// Complex synth: supersaw chords into a shared reverb
 
 (
 ~reverbBus = ~reverbBus ?? { Bus.audio(s, 2) };
@@ -21,8 +18,6 @@ SynthDef(\reverb, { |out = 0, in = 0|
     Out.ar(out, FreeVerb2.ar(sig[0], sig[1], 1, 0.85, 0.4));
 }).add;
 
-// fork runs this in a routine, so s.sync can wait for the
-// server to load both SynthDefs.
 fork {
     s.sync;
     ~reverb = Synth.tail(s, \reverb, [in: ~reverbBus]);
@@ -33,6 +28,7 @@ fork {
         \octave, 4,
         \dur, 2,
         \legato, 0.9
+    // quant -1: start on the DAW's next bar
     ).play(quant: -1);
 };
 )
