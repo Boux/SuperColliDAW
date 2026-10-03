@@ -582,7 +582,7 @@ void testInstrumentPassesNoteDetails(const clap_plugin_factory* factory) {
 void testInstrumentBendsPitch(const clap_plugin_factory* factory) {
     Instance instance(factory, 48000.0);
     instance.waitForSound();
-    instance.loadState(supercollidaw::encodeState({ "SuperColliDAW.instrument { |freq, bend, amp| SinOsc.ar(freq * bend.midiratio, 0, amp * 0.1) };\n", "", {} }));
+    instance.loadState(supercollidaw::encodeState({ "SuperColliDAW.instrument { |freq, amp| SinOsc.ar(freq, 0, amp * 0.1) };\n", "", {} }));
     instance.waitForSilence();
     instance.waitForSound([&] { instance.sendMidi(0x90, 69, 127); });
     instance.sendMidi(0xE0, 0x7F, 0x7F);
@@ -594,6 +594,15 @@ void testInstrumentBendsPitch(const clap_plugin_factory* factory) {
     std::printf("  note 69 bent fully up: %.2f Hz, note 57 started while bent: %.2f Hz\n", bent, started);
     check(std::fabs(bent - 493.88) <= 4.0, "pitch bend reaches the playing voice as bend, two semitones by default");
     check(std::fabs(started - 246.94) <= 4.0, "a note started while the wheel is bent starts bent");
+
+    instance.loadState(supercollidaw::encodeState({ "SuperColliDAW.instrument { |noteFreq, bend| SinOsc.ar(noteFreq, 0, 0.1 * (bend > 1)) };\n", "", {} }));
+    instance.waitForSilence();
+    const double unbent = instance.waitForFrequency(440.0, [&] {
+        instance.sendMidi(0x90, 69, 127);
+        instance.sendMidi(0xE0, 0x7F, 0x7F);
+    });
+    std::printf("  noteFreq of note 69 with the wheel fully up: %.2f Hz\n", unbent);
+    check(std::fabs(unbent - 440.0) <= 4.0, "noteFreq stays the key's pitch while freq follows the bend");
 }
 
 void testInstrumentSustainPedal(const clap_plugin_factory* factory) {
@@ -612,6 +621,48 @@ void testInstrumentSustainPedal(const clap_plugin_factory* factory) {
     std::printf("  1 s after the note-off with the pedal down: peak %.3f\n", sustained);
     check(sustained > kTestSineAmp * 0.5f, "the sustain pedal holds a released note");
     check(released, "lifting the pedal releases it");
+}
+
+void testInstrumentFollowsMpeBend(const clap_plugin_factory* factory) {
+    Instance instance(factory, 48000.0);
+    instance.waitForSound();
+    instance.loadState(supercollidaw::encodeState({ "SuperColliDAW.instrument { |freq| SinOsc.ar(freq, 0, 0.1) };\n", "", {} }));
+    instance.waitForSilence();
+    instance.waitForSound([&] { instance.sendMidi(0x91, 57, 127); });
+    instance.sendMidi(0xE1, 0, 96);
+    const double perNote = instance.waitForFrequency(880.0);
+    instance.sendMidi(0xE0, 127, 127);
+    const double withMaster = instance.waitForFrequency(987.76);
+    instance.sendMidi(0xB1, 101, 0);
+    instance.sendMidi(0xB1, 100, 0);
+    instance.sendMidi(0xB1, 6, 12);
+    const double withRange = instance.waitForFrequency(349.2);
+    std::printf("  note 57 on channel 2 bent halfway: %.2f Hz, plus channel 1 fully up: %.2f Hz, after RPN 0 sets channel 2 to 12: %.2f Hz\n", perNote, withMaster, withRange);
+    check(std::fabs(perNote - 880.0) <= 4.0, "per-note bend on channels 2 to 16 spans MPE's 48 semitones");
+    check(std::fabs(withMaster - 987.76) <= 4.0, "bend on channel 1, the MPE master channel, adds to every voice");
+    check(std::fabs(withRange - 349.2) <= 4.0, "Pitch Bend Sensitivity (RPN 0) sets a channel's bend range");
+}
+
+void testInstrumentFollowsMpeTimbreAndPressure(const clap_plugin_factory* factory) {
+    const std::string code = "SuperColliDAW.instrument { |freq, timbre, pressure| SinOsc.ar(freq * (1 + timbre), 0, 0.02 + (pressure * 0.08)) };\n";
+    Instance instance(factory, 48000.0);
+    instance.waitForSound();
+    instance.loadState(supercollidaw::encodeState({ code, "", {} }));
+    instance.waitForSilence();
+    const double resting = instance.waitForFrequency(220.0, [&] { instance.sendMidi(0x92, 57, 127); });
+    instance.sendMidi(0xB2, 74, 127);
+    const double bright = instance.waitForFrequency(440.0);
+    instance.sendMidi(0xD2, 127, 0);
+    const bool pressed = instance.waitForPeakAbove(0.08f);
+    instance.sendMidi(0xD2, 0, 0);
+    instance.waitForSignal([](const std::vector<float>& signal) { return Instance::peak(signal) < 0.05f; });
+    instance.sendMidi(0xD0, 127, 0);
+    const bool pressedOnMaster = instance.waitForPeakAbove(0.08f);
+    std::printf("  note 57 on channel 3: %.2f Hz at rest, %.2f Hz with CC 74 at 127\n", resting, bright);
+    check(std::fabs(resting - 220.0) <= 4.0, "a voice starts with timbre 0 until CC 74 arrives");
+    check(std::fabs(bright - 440.0) <= 4.0, "CC 74 at 127 on a note's channel sets that voice's timbre to 1");
+    check(pressed, "channel pressure on a note's channel sets that voice's pressure");
+    check(pressedOnMaster, "pressure on channel 1 reaches voices on the other channels");
 }
 
 void testInstrumentMode(const clap_plugin_factory* factory, const std::string& mode, bool glides) {
@@ -1011,6 +1062,8 @@ int main(int argc, char** argv) {
     testInstrumentSustainPedal(factory);
     testInstrumentMode(factory, "\\mono", false);
     testInstrumentMode(factory, "\\legato", true);
+    testInstrumentFollowsMpeBend(factory);
+    testInstrumentFollowsMpeTimbreAndPressure(factory);
     testClockFollowsTransport(factory);
     testTransportUGens(factory);
     testPatternMidiReachesTheTrack(factory);

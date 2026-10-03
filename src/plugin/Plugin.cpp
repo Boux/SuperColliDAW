@@ -313,7 +313,7 @@ bool Plugin::notePortInfo(const clap_plugin*, uint32_t index, bool isInput, clap
     if (index != 0)
         return false;
     info->id = isInput ? kNoteInputPortId : kNoteOutputPortId;
-    info->supported_dialects = CLAP_NOTE_DIALECT_MIDI;
+    info->supported_dialects = isInput ? CLAP_NOTE_DIALECT_MIDI | CLAP_NOTE_DIALECT_MIDI_MPE : CLAP_NOTE_DIALECT_MIDI;
     info->preferred_dialect = CLAP_NOTE_DIALECT_MIDI;
     std::strncpy(info->name, isInput ? "MIDI In" : "MIDI Out", CLAP_NAME_SIZE);
     return true;
