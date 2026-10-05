@@ -91,19 +91,8 @@ target_compile_definitions(scsynth_embedded PUBLIC
     BOOST_CONFIG_SUPPRESS_OUTDATED_MESSAGE
     _REENTRANT
 )
-if(UNIX AND NOT APPLE)
-    target_compile_definitions(scsynth_embedded PUBLIC "SC_PLUGIN_EXT=\".so\"")
-endif()
 
 target_link_libraries(scsynth_embedded PUBLIC sc_tlsf PkgConfig::SNDFILE PkgConfig::FFTW3F Threads::Threads ${CMAKE_DL_LIBS})
-if(CMAKE_SYSTEM_NAME MATCHES "Linux")
-    target_link_libraries(scsynth_embedded PUBLIC rt)
-endif()
-if(WIN32)
-    target_sources(scsynth_embedded PRIVATE ${SC_ROOT}/common/SC_Win32Utils.cpp)
-    target_compile_definitions(scsynth_embedded PUBLIC WIN32_LEAN_AND_MEAN NOMINMAX _WIN32_WINNT=0x0600 PRIVATE UNICODE _UNICODE)
-    target_link_libraries(scsynth_embedded PUBLIC ws2_32 mswsock winmm)
-endif()
 
 # Upstream SuperCollider code; its warnings are not ours to fix.
 target_compile_options(scsynth_embedded PRIVATE -w)

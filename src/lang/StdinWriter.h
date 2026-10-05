@@ -24,6 +24,8 @@ public:
     void close();
 
 private:
+    static void blockBrokenPipeSignal();
+
     void run();
     std::optional<std::string> next();
 

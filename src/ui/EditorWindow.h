@@ -8,6 +8,7 @@
 #include <functional>
 
 struct ImGuiContext;
+struct ImGuiIO;
 
 namespace supercollidaw {
 
@@ -32,6 +33,7 @@ public:
 private:
     static PuglStatus onEvent(PuglView* view, const PuglEvent* event);
 
+    void useSystemKeyRepeat(ImGuiIO& io);
     PuglStatus handle(const PuglEvent& event);
     PuglStatus startRenderer();
     PuglStatus stopRenderer();

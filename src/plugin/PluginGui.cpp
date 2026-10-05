@@ -15,15 +15,7 @@ constexpr uint32_t kMinWidth = 400;
 constexpr uint32_t kMinHeight = 300;
 constexpr uint32_t kFrameIntervalMs = 16;
 
-#if defined(_WIN32)
-constexpr const char* kWindowApi = CLAP_WINDOW_API_WIN32;
-PuglNativeView nativeParent(const clap_window& window) { return reinterpret_cast<PuglNativeView>(window.win32); }
-#else
-constexpr const char* kWindowApi = CLAP_WINDOW_API_X11;
-PuglNativeView nativeParent(const clap_window& window) { return static_cast<PuglNativeView>(window.x11); }
-#endif
-
-bool isEmbeddedNative(const char* api, bool isFloating) { return !isFloating && api && !std::strcmp(api, kWindowApi); }
+bool isEmbeddedNative(const char* api, bool isFloating) { return !isFloating && api && !std::strcmp(api, PluginGui::kWindowApi); }
 
 }
 

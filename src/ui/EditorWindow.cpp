@@ -7,10 +7,6 @@
 #include <imgui_impl_opengl3.h>
 #include <pugl/gl.h>
 
-#if !defined(_WIN32) && !defined(__APPLE__)
-#    include <X11/XKBlib.h>
-#endif
-
 #include <algorithm>
 #include <utility>
 
@@ -31,21 +27,6 @@ private:
     ImGuiContext* mPrevious;
 };
 
-// TODO(macos, windows): read the system key repeat delay and rate there too; ImGui's defaults apply meanwhile.
-void useSystemKeyRepeat(PuglWorld* world, ImGuiIO& io) {
-#if !defined(_WIN32) && !defined(__APPLE__)
-    Display* display = static_cast<Display*>(puglGetNativeWorld(world));
-    // X11 repeats held keys as release+press pairs, which ImGui trickles over two frames each, so they lag behind.
-    XkbSetDetectableAutoRepeat(display, True, nullptr);
-    unsigned int delayMs = 0;
-    unsigned int intervalMs = 0;
-    if (!XkbGetAutoRepeatRate(display, XkbUseCoreKbd, &delayMs, &intervalMs))
-        return;
-    io.KeyRepeatDelay = delayMs / 1000.f;
-    io.KeyRepeatRate = intervalMs / 1000.f;
-#endif
-}
-
 void addCodeFont(ImGuiIO& io) { io.Fonts->AddFontFromMemoryCompressedTTF(dejavu, dejavuSize, kFontSize); }
 
 }
@@ -64,7 +45,7 @@ EditorWindow::EditorWindow(PuglNativeView parent, uint32_t width, uint32_t heigh
     setScale(scale);
 
     puglSetWorldString(mWorld, PUGL_CLASS_NAME, "SuperColliDAW");
-    useSystemKeyRepeat(mWorld, ImGui::GetIO());
+    useSystemKeyRepeat(ImGui::GetIO());
     puglSetHandle(mView, this);
     puglSetEventFunc(mView, onEvent);
     puglSetBackend(mView, puglGlBackend());
@@ -108,14 +89,6 @@ void EditorWindow::idle() {
 }
 
 void EditorWindow::processEvents() { puglUpdate(mWorld, 0.0); }
-
-int EditorWindow::eventFd() const {
-#if !defined(_WIN32) && !defined(__APPLE__)
-    return ConnectionNumber(static_cast<Display*>(puglGetNativeWorld(mWorld)));
-#else
-    return -1;
-#endif
-}
 
 PuglStatus EditorWindow::onEvent(PuglView* view, const PuglEvent* event) {
     return static_cast<EditorWindow*>(puglGetHandle(view))->handle(*event);

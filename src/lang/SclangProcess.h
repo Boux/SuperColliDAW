@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace TinyProcessLib {
 class Process;
@@ -47,6 +48,8 @@ public:
     void stopSound();
 
 private:
+    static std::vector<std::string> environmentVariables();
+
     void send(const std::string& expression);
     void shutdown();
 

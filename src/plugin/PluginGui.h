@@ -14,6 +14,7 @@ namespace supercollidaw {
 class PluginGui {
 public:
     static const clap_plugin_gui kExtension;
+    static const char* const kWindowApi;
 
     static const clap_plugin_posix_fd_support kPosixFdExtension;
 
@@ -32,6 +33,7 @@ public:
 
 private:
     static PluginGui& from(const clap_plugin* plugin);
+    static PuglNativeView nativeParent(const clap_window& window);
 
     bool create();
     void destroy();

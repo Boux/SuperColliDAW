@@ -2,25 +2,7 @@
 
 #include "process.hpp"
 
-#if !defined(_WIN32)
-#    include <signal.h>
-#endif
-
 namespace supercollidaw {
-
-namespace {
-
-// Writing to a child that has exited raises SIGPIPE, which kills the whole host unless the writing thread blocks it.
-void blockBrokenPipeSignal() {
-#if !defined(_WIN32)
-    sigset_t signals;
-    sigemptyset(&signals);
-    sigaddset(&signals, SIGPIPE);
-    pthread_sigmask(SIG_BLOCK, &signals, nullptr);
-#endif
-}
-
-}
 
 StdinWriter::StdinWriter(TinyProcessLib::Process& process): mProcess(process), mThread([this] { run(); }) {}
 

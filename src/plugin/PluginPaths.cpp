@@ -11,22 +11,11 @@ namespace {
 
 fs::path gPluginBinaryPath;
 
+}
+
 fs::path environmentPath(const char* name) {
     const char* value = std::getenv(name);
     return value ? fs::path(value) : fs::path();
-}
-
-fs::path platformUserDataDir() {
-#if defined(_WIN32)
-    return environmentPath("APPDATA");
-#elif defined(__APPLE__)
-    return environmentPath("HOME") / "Library" / "Application Support";
-#else
-    const fs::path xdgDataHome = environmentPath("XDG_DATA_HOME");
-    return xdgDataHome.empty() ? environmentPath("HOME") / ".local" / "share" : xdgDataHome;
-#endif
-}
-
 }
 
 void setPluginBinaryPath(const char* path) { gPluginBinaryPath = path; }
