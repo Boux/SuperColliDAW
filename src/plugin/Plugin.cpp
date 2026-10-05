@@ -61,6 +61,12 @@ const clap_plugin_state Plugin::kState = {
     .load = [](const clap_plugin* plugin, const clap_istream* stream) { return from(plugin)->loadState(stream); },
 };
 
+// sclang schedules on the system clock, so it cannot keep up with a render that runs faster than real time.
+const clap_plugin_render Plugin::kRender = {
+    .has_hard_realtime_requirement = [](const clap_plugin*) { return true; },
+    .set = [](const clap_plugin*, clap_plugin_render_mode mode) { return mode == CLAP_RENDER_REALTIME; },
+};
+
 Plugin::Plugin(const clap_host* host):
     mHost(host),
     mWatcher([host] { host->request_callback(host); }),
@@ -131,6 +137,7 @@ void Plugin::stopSclang() {
     mSclang.reset();
 }
 
+// TODO: keep the World when the sample rate is unchanged; hosts restart processing on routing or latency changes, which wipes the running server.
 bool Plugin::activate(double sampleRate, uint32_t maxFrames) {
     auto engine = std::make_unique<Engine>(
         Engine::Config{ sampleRate, kNumChannels, kNumChannels, installedUGenPluginPath(), [this](const std::string& line) { post(line); } });
@@ -316,6 +323,8 @@ const void* Plugin::extension(const char* id) const {
         return &kState;
     if (!std::strcmp(id, CLAP_EXT_PARAMS))
         return &kParameterExtension;
+    if (!std::strcmp(id, CLAP_EXT_RENDER))
+        return &kRender;
     return nullptr;
 }
 

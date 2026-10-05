@@ -76,6 +76,7 @@ private:
     static const clap_plugin_latency kLatency;
     static const clap_plugin_timer_support kTimerSupport;
     static const clap_plugin_state kState;
+    static const clap_plugin_render kRender;
 
     clap_plugin mClapPlugin;
     const clap_host* mHost;
