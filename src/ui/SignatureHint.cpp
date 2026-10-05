@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <string>
 
 namespace supercollidaw {
 
@@ -37,6 +38,36 @@ void drawText(const std::string& text, ImGuiCol color) {
 }
 
 std::string describe(const Parameter& parameter) { return parameter.defaultValue.empty() ? parameter.name : parameter.name + " = " + parameter.defaultValue; }
+
+std::string describe(const Signature& signature) {
+    std::string text = signature.label + "(";
+    for (size_t index = 0; index < signature.parameters.size(); ++index)
+        text += (index > 0 ? ", " : "") + describe(signature.parameters[index]);
+    return text + ")";
+}
+
+std::string moreText(const SignatureHelp& help) {
+    const size_t hidden = help.total - std::min(help.total, help.signatures.size());
+    return hidden > 0 ? "and " + std::to_string(hidden) + " more" : std::string();
+}
+
+ImVec2 hintSize(const SignatureHelp& help, const std::string& more) {
+    const ImGuiStyle& style = ImGui::GetStyle();
+    float width = ImGui::CalcTextSize(more.c_str()).x;
+    for (const Signature& signature : help.signatures)
+        width = std::max(width, ImGui::CalcTextSize(describe(signature).c_str()).x);
+    const size_t lines = help.signatures.size() + (more.empty() ? 0 : 1);
+    const float height = static_cast<float>(lines) * ImGui::GetTextLineHeightWithSpacing() - style.ItemSpacing.y;
+    return ImVec2(width + 2.f * style.WindowPadding.x, height + 2.f * style.WindowPadding.y);
+}
+
+// ImGui keeps windows inside the display only when it places them itself, so the hint moves left of the right edge, and under the line when there is no room above.
+ImVec2 hintPosition(ImVec2 caret, float lineHeight, ImVec2 size) {
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const float right = std::max(viewport->Pos.x, viewport->Pos.x + viewport->Size.x - size.x);
+    const float above = caret.y - size.y;
+    return ImVec2(std::clamp(caret.x, viewport->Pos.x, right), above >= viewport->Pos.y ? above : caret.y + lineHeight);
+}
 
 void drawSignature(const Signature& signature, std::optional<size_t> active) {
     ImGui::TextUnformatted((signature.label + "(").c_str());
@@ -79,12 +110,13 @@ const SignatureHelp* SignatureHint::recentReply(const std::string& callee) const
 }
 
 void SignatureHint::draw(const SignatureHelp& help, const CallContext& call) const {
-    ImGui::SetNextWindowPos(mEditor.screenPosition(mEditor.GetMainCursorPosition()), ImGuiCond_Always, ImVec2(0.f, 1.f));
+    const std::string more = moreText(help);
+    ImGui::SetNextWindowPos(hintPosition(mEditor.screenPosition(mEditor.GetMainCursorPosition()), mEditor.GetLineHeight(), hintSize(help, more)));
     ImGui::Begin("##signature", nullptr, kHintFlags);
     for (const Signature& signature : help.signatures)
         drawSignature(signature, activeParameter(signature, call));
-    if (help.total > help.signatures.size())
-        ImGui::TextDisabled("and %zu more", help.total - help.signatures.size());
+    if (!more.empty())
+        ImGui::TextDisabled("%s", more.c_str());
     ImGui::End();
 }
 

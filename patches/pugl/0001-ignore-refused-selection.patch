@@ -1,0 +1,15 @@
+diff --git a/src/x11.c b/src/x11.c
+index 0058986..1ebf0dd 100644
+--- a/src/x11.c
++++ b/src/x11.c
+@@ -1730,6 +1730,10 @@ handleSelectionNotify(const PuglWorld* const       world,
+     return PUGL_SUCCESS; // Ignore unknown selection
+   }
+ 
++  if (event->property == None) {
++    return PUGL_SUCCESS; // Conversion refused, or the selection has no owner
++  }
++
+   PuglInternals* const impl      = view->impl;
+   Display* const       display   = view->world->impl->display;
+   PuglEvent            puglEvent = {{PUGL_NOTHING, 0U}};

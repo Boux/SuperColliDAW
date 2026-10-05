@@ -1,0 +1,35 @@
+diff --git a/TextEditor.cpp b/TextEditor.cpp
+index 9df4a1b..08e5ad3 100644
+--- a/TextEditor.cpp
++++ b/TextEditor.cpp
+@@ -8583,11 +8583,6 @@ bool TextEditor::AutoComplete::render(Document& document, Cursors& cursors, Type
+ 	// open popup window
+ 	bool result = false;
+ 	const auto pos = typesetter.docPos2VisPos(document, currentLocation);
+-
+-	ImGui::SetNextWindowPos(ImVec2(
+-		ImGui::GetCursorScreenPos().x + textOffset + pos.column * glyphSize.x,
+-		ImGui::GetCursorScreenPos().y + (pos.row + 1) * glyphSize.y));
+-
+ 	const auto suggestions = state.suggestions.size();
+ 
+ 	// an empty result while typing dismisses silently; only a manual trigger earns the "no suggestions" feedback
+@@ -8598,7 +8593,17 @@ bool TextEditor::AutoComplete::render(Document& document, Cursors& cursors, Type
+ 	const auto visibleSuggestions = (suggestions == 0) ? 1 : std::min(static_cast<size_t>(10), suggestions);
+ 	const auto& style = ImGui::GetStyle();
+ 	const auto height = ImGui::GetFrameHeightWithSpacing() * visibleSuggestions + style.WindowPadding.y * 2.0f;
+-	ImGui::SetNextWindowSize(ImVec2(configuration.suggestionWidth * glyphSize.x, height));
++	const auto size = ImVec2(configuration.suggestionWidth * glyphSize.x, height);
++
++	// keep the popup inside the viewport as Dear ImGui doesn't clamp windows positioned through the API
++	// (shift it left at the right edge and open it above the line when there is no room below)
++	const auto viewport = ImGui::GetMainViewport();
++	const auto left = ImGui::GetCursorScreenPos().x + textOffset + pos.column * glyphSize.x;
++	const auto lineTop = ImGui::GetCursorScreenPos().y + pos.row * glyphSize.y;
++	const auto right = std::max(viewport->Pos.x, viewport->Pos.x + viewport->Size.x - size.x);
++	const auto fitsBelow = lineTop + glyphSize.y + size.y <= viewport->Pos.y + viewport->Size.y;
++	ImGui::SetNextWindowPos(ImVec2(std::clamp(left, viewport->Pos.x, right), fitsBelow ? lineTop + glyphSize.y : std::max(viewport->Pos.y, lineTop - size.y)));
++	ImGui::SetNextWindowSize(size);
+ 
+ 	const ImGuiWindowFlags flags =
+ 		ImGuiWindowFlags_NoFocusOnAppearing |

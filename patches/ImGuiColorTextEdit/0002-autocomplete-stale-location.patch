@@ -1,0 +1,14 @@
+diff --git a/TextEditor.cpp b/TextEditor.cpp
+index 08e5ad3..49b86c0 100644
+--- a/TextEditor.cpp
++++ b/TextEditor.cpp
+@@ -8521,7 +8521,8 @@ bool TextEditor::AutoComplete::render(Document& document, Cursors& cursors, Type
+ 			// reset activation flag
+ 			requestActivation = false;
+ 
+-			// capture locations
++			// capture locations (the document may have changed during the popup delay, so the location captured when autocomplete was triggered may no longer exist)
++			currentLocation = document.normalizePos(currentLocation);
+ 			startLocation = document.findWordStart(currentLocation, true);
+ 
+ 			// update the autocomplete state

@@ -9,13 +9,15 @@ find_package(OpenGL REQUIRED)
 
 # TODO(macos, windows): add pugl's mac*.m and win*.c sources and their system libraries.
 find_package(X11 REQUIRED COMPONENTS Xcursor Xrandr Xext)
+set(PUGL_PATCHED_DIR ${CMAKE_BINARY_DIR}/pugl_patched)
+patch_sources(${PUGL_DIR} ${PUGL_PATCHED_DIR} ${CMAKE_SOURCE_DIR}/patches/pugl src/x11.c)
 add_library(ui_pugl STATIC
     ${PUGL_DIR}/src/common.c
     ${PUGL_DIR}/src/internal.c
-    ${PUGL_DIR}/src/x11.c
+    ${PUGL_PATCHED_DIR}/src/x11.c
     ${PUGL_DIR}/src/x11_gl.c
 )
-target_include_directories(ui_pugl PUBLIC ${PUGL_DIR}/include)
+target_include_directories(ui_pugl PUBLIC ${PUGL_DIR}/include PRIVATE ${PUGL_DIR}/src)
 target_compile_definitions(ui_pugl
     PUBLIC PUGL_STATIC
     PRIVATE PUGL_INTERNAL USE_XCURSOR=1 USE_XRANDR=1 USE_XSYNC=1 _POSIX_C_SOURCE=200809L
@@ -31,6 +33,8 @@ add_library(ui_imgui STATIC
 )
 target_include_directories(ui_imgui PUBLIC ${IMGUI_DIR} ${IMGUI_DIR}/backends)
 
-add_library(ui_texteditor STATIC ${TEXTEDIT_DIR}/TextEditor.cpp)
+set(TEXTEDIT_PATCHED_DIR ${CMAKE_BINARY_DIR}/texteditor_patched)
+patch_sources(${TEXTEDIT_DIR} ${TEXTEDIT_PATCHED_DIR} ${CMAKE_SOURCE_DIR}/patches/ImGuiColorTextEdit TextEditor.cpp)
+add_library(ui_texteditor STATIC ${TEXTEDIT_PATCHED_DIR}/TextEditor.cpp)
 target_include_directories(ui_texteditor PUBLIC ${TEXTEDIT_DIR})
 target_link_libraries(ui_texteditor PUBLIC ui_imgui)

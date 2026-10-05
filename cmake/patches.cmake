@@ -1,0 +1,20 @@
+# patch_sources(<root> <dest> <patch dir> <files...>): copies <files> from <root> into <dest> and applies
+# every patch in <patch dir> there, so the submodule stays pristine. Each patch must only touch <files>.
+find_program(PATCH_EXECUTABLE patch REQUIRED)
+
+function(patch_sources root dest patch_dir)
+    file(GLOB patches ${patch_dir}/*.patch)
+    file(REMOVE_RECURSE ${dest})
+    foreach(file ${ARGN})
+        get_filename_component(dir ${dest}/${file} DIRECTORY)
+        file(COPY ${root}/${file} DESTINATION ${dir})
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${root}/${file})
+    endforeach()
+    foreach(patch ${patches})
+        execute_process(COMMAND ${PATCH_EXECUTABLE} -p1 --forward --input=${patch} WORKING_DIRECTORY ${dest} RESULT_VARIABLE result)
+        if(NOT result EQUAL 0)
+            message(FATAL_ERROR "Failed to apply ${patch}")
+        endif()
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${patch})
+    endforeach()
+endfunction()

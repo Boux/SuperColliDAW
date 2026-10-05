@@ -28,26 +28,8 @@ add_library(sc_tlsf STATIC ${SC_EXT}/TLSF-2.4.6/src/tlsf.c)
 target_compile_definitions(sc_tlsf PRIVATE TLSF_STATISTIC=1)
 target_include_directories(sc_tlsf INTERFACE ${SC_EXT}/TLSF-2.4.6/src)
 
-# Upstream files we patch are copied into the build tree and patched there, so
-# the submodule stays pristine. Each patch in patches/supercollider must only
-# touch files listed in SC_PATCHED_FILES.
-find_program(PATCH_EXECUTABLE patch REQUIRED)
-set(SC_PATCHED_FILES server/scsynth/SC_World.cpp)
 set(SC_PATCHED_DIR ${CMAKE_BINARY_DIR}/sc_patched)
-file(GLOB SC_PATCHES ${CMAKE_SOURCE_DIR}/patches/supercollider/*.patch)
-file(REMOVE_RECURSE ${SC_PATCHED_DIR})
-foreach(file ${SC_PATCHED_FILES})
-    get_filename_component(dir ${SC_PATCHED_DIR}/${file} DIRECTORY)
-    file(COPY ${SC_ROOT}/${file} DESTINATION ${dir})
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${SC_ROOT}/${file})
-endforeach()
-foreach(patch ${SC_PATCHES})
-    execute_process(COMMAND ${PATCH_EXECUTABLE} -p1 --forward --input=${patch} WORKING_DIRECTORY ${SC_PATCHED_DIR} RESULT_VARIABLE result)
-    if(NOT result EQUAL 0)
-        message(FATAL_ERROR "Failed to apply ${patch}")
-    endif()
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${patch})
-endforeach()
+patch_sources(${SC_ROOT} ${SC_PATCHED_DIR} ${CMAKE_SOURCE_DIR}/patches/supercollider server/scsynth/SC_World.cpp)
 
 set(SCSYNTH_DIR ${SC_ROOT}/server/scsynth)
 add_library(scsynth_embedded STATIC

@@ -12,6 +12,7 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
+include(cmake/patches.cmake)
 include(cmake/scsynth.cmake)
 include(cmake/embed.cmake)
 include(cmake/resources.cmake)
