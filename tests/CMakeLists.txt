@@ -10,9 +10,13 @@ target_include_directories(clap_gui_host PRIVATE ${CMAKE_SOURCE_DIR}/third_party
 target_link_libraries(clap_gui_host PRIVATE X11::X11 ${CMAKE_DL_LIBS})
 add_dependencies(clap_gui_host supercollidaw_clap)
 
-add_executable(code_region_test code_region_test.cpp ${CMAKE_SOURCE_DIR}/src/ui/CodeRegion.cpp)
+add_executable(code_region_test code_region_test.cpp ${CMAKE_SOURCE_DIR}/src/ui/CodeRegion.cpp ${CMAKE_SOURCE_DIR}/src/ui/CodeScanner.cpp)
 target_include_directories(code_region_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME code_region_test COMMAND code_region_test)
+
+add_executable(call_context_test call_context_test.cpp ${CMAKE_SOURCE_DIR}/src/ui/CallContext.cpp ${CMAKE_SOURCE_DIR}/src/ui/CodeScanner.cpp)
+target_include_directories(call_context_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME call_context_test COMMAND call_context_test)
 
 add_executable(code_document_test code_document_test.cpp
     ${CMAKE_SOURCE_DIR}/src/plugin/code/CodeDocument.cpp
@@ -38,3 +42,11 @@ add_test(NAME server_output_test COMMAND server_output_test)
 add_executable(sample_clock_test sample_clock_test.cpp ${CMAKE_SOURCE_DIR}/src/engine/SampleClock.cpp)
 target_include_directories(sample_clock_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME sample_clock_test COMMAND sample_clock_test)
+
+find_program(SCLANG_EXECUTABLE sclang)
+if(SCLANG_EXECUTABLE)
+    foreach(name completion signatures)
+        add_test(NAME ${name}_test COMMAND ${SCLANG_EXECUTABLE} --include-path ${CMAKE_BINARY_DIR}/src/SuperColliDAW/classes ${CMAKE_CURRENT_SOURCE_DIR}/${name}_test.scd)
+        set_tests_properties(${name}_test PROPERTIES PASS_REGULAR_EXPRESSION "${name}: all passed" TIMEOUT 60)
+    endforeach()
+endif()

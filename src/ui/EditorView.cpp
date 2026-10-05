@@ -23,24 +23,24 @@ constexpr float kMinPaneHeight = 60.f;
 constexpr float kMinPaneWidth = 200.f;
 constexpr float kSplitterThickness = 6.f;
 
-std::vector<std::string> linesOf(const TextEditor& editor) {
-    std::vector<std::string> lines(editor.GetLineCount());
-    for (size_t line = 0; line < lines.size(); ++line)
-        lines[line] = editor.GetLineText(line);
-    return lines;
+TextEditor::DocSelection wholeLines(LineRange lines) { return { TextEditor::DocPos(lines.first, 0), TextEditor::DocPos(lines.last, kEndOfLine) }; }
+
+TextEditor::DocSelection selectionOrRegion(const TextEditor& editor) {
+    if (editor.MainCursorHasSelection())
+        return editor.GetMainCursorSelection();
+    return wholeLines(regionAround(linesOf(editor), editor.GetMainCursorPosition().line));
 }
 
-std::string selectionOrRegion(const TextEditor& editor) {
+TextEditor::DocSelection selectionOrLine(const TextEditor& editor) {
     if (editor.MainCursorHasSelection())
-        return editor.GetSectionText(editor.GetMainCursorSelection());
-    const LineRange region = regionAround(linesOf(editor), editor.GetMainCursorPosition().line);
-    return editor.GetSectionText(TextEditor::DocPos(region.first, 0), TextEditor::DocPos(region.last, kEndOfLine));
+        return editor.GetMainCursorSelection();
+    const size_t line = editor.GetMainCursorPosition().line;
+    return wholeLines({ line, line });
 }
 
-std::string selectionOrLine(const TextEditor& editor) {
-    if (editor.MainCursorHasSelection())
-        return editor.GetSectionText(editor.GetMainCursorSelection());
-    return editor.GetLineText(editor.GetMainCursorPosition().line);
+LineRange linesIn(const TextEditor::DocSelection& section) {
+    const bool endsAtLineStart = section.end.index == 0 && section.end.line > section.start.line;
+    return { section.start.line, section.end.line - (endsAtLineStart ? 1 : 0) };
 }
 
 ImVec2 splitterDrag(const char* id, const ImVec2& size, ImGuiMouseCursor cursor) {
@@ -54,6 +54,8 @@ ImVec2 splitterDrag(const char* id, const ImVec2& size, ImGuiMouseCursor cursor)
 
 EditorView::EditorView(EditorActions actions, const PostLog& postLog, std::vector<Example> examples):
     mActions(std::move(actions)),
+    mCompletion(mEditor, mActions.complete),
+    mSignatureHint(mEditor, mActions.lookUpSignatures),
     mPostWindow(postLog),
     mExamples(std::move(examples)),
     mPostHeight(kInitialPostHeight),
@@ -72,6 +74,7 @@ void EditorView::draw() {
     ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
     ImGui::Begin("SuperColliDAW", nullptr, kFullWindowFlags);
     handleShortcuts();
+    mFlash.update();
     drawToolbar();
     const float width = ImGui::GetContentRegionAvail().x - kSplitterThickness;
     ImGui::BeginChild("code and post", ImVec2(mShowExamples ? width - examplesWidth(width) : 0.f, 0.f));
@@ -85,7 +88,9 @@ void EditorView::draw() {
 void EditorView::drawCodeAndPost() {
     const float available = ImGui::GetContentRegionAvail().y - kSplitterThickness - 2.f * ImGui::GetStyle().ItemSpacing.y;
     mPostHeight = std::clamp(mPostHeight, kMinPaneHeight, std::max(kMinPaneHeight, available - kMinPaneHeight));
-    mEditor.Render("code", ImVec2(0.f, available - mPostHeight));
+    mEditor.draw("code", ImVec2(0.f, available - mPostHeight));
+    mCompletion.update();
+    mSignatureHint.update();
     mPostHeight -= splitterDrag("post splitter", ImVec2(-1.f, kSplitterThickness), ImGuiMouseCursor_ResizeNS).y;
     mPostWindow.draw(ImVec2(0.f, 0.f));
 }
@@ -102,7 +107,7 @@ float EditorView::examplesWidth(float width) const { return std::clamp(mExamples
 
 void EditorView::drawToolbar() {
     if (ImGui::Button("Run all"))
-        mActions.runAll(mEditor.GetText());
+        runAll();
     ImGui::SetItemTooltip("Stop everything and run the whole code.\nCtrl+Enter evaluates the block or selection, Shift+Enter the line.");
     ImGui::SameLine();
     if (ImGui::Button("Stop"))
@@ -153,9 +158,9 @@ void EditorView::drawStatus() {
 
 void EditorView::handleShortcuts() {
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Enter, kOverEditor))
-        mActions.evaluate(selectionOrRegion(focusedEditor()));
+        evaluate(focusedEditor(), selectionOrRegion(focusedEditor()));
     if (ImGui::Shortcut(ImGuiMod_Shift | ImGuiKey_Enter, kOverEditor))
-        mActions.evaluate(selectionOrLine(focusedEditor()));
+        evaluate(focusedEditor(), selectionOrLine(focusedEditor()));
     if (ImGui::Shortcut(ImGuiKey_F1, kOverEditor))
         mShowExamples = !mShowExamples;
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Period, kOverEditor))
@@ -170,6 +175,16 @@ void EditorView::handleShortcuts() {
         mActions.open();
 }
 
-const TextEditor& EditorView::focusedEditor() const { return mShowExamples && mExamples.focused() ? mExamples.viewer() : mEditor; }
+void EditorView::runAll() {
+    mFlash.start(mEditor, { 0, mEditor.GetLineCount() - 1 });
+    mActions.runAll(mEditor.GetText());
+}
+
+void EditorView::evaluate(TextEditor& editor, const TextEditor::DocSelection& section) {
+    mFlash.start(editor, linesIn(section));
+    mActions.evaluate(editor.GetSectionText(section));
+}
+
+TextEditor& EditorView::focusedEditor() { return mShowExamples && mExamples.focused() ? mExamples.viewer() : mEditor; }
 
 }

@@ -61,7 +61,11 @@ const clap_plugin_state Plugin::kState = {
     .load = [](const clap_plugin* plugin, const clap_istream* stream) { return from(plugin)->loadState(stream); },
 };
 
-Plugin::Plugin(const clap_host* host): mHost(host), mWatcher([host] { host->request_callback(host); }) {
+Plugin::Plugin(const clap_host* host):
+    mHost(host),
+    mWatcher([host] { host->request_callback(host); }),
+    mCompletions(kCompletionsAddress, readCompletion, [host] { host->request_callback(host); }),
+    mSignatures(kSignaturesAddress, readSignatureHelp, [host] { host->request_callback(host); }) {
     mClapPlugin.desc = &kDescriptor;
     mClapPlugin.plugin_data = this;
     mClapPlugin.init = [](const clap_plugin* plugin) { return from(plugin)->init(); };
@@ -94,7 +98,7 @@ bool Plugin::init() {
     mHostFd = static_cast<const clap_host_posix_fd_support*>(mHost->get_extension(mHost, CLAP_EXT_POSIX_FD_SUPPORT));
     mHostState = static_cast<const clap_host_state*>(mHost->get_extension(mHost, CLAP_EXT_STATE));
     mHostParams = static_cast<const clap_host_params*>(mHost->get_extension(mHost, CLAP_EXT_PARAMS));
-    mOscPort = std::make_unique<OscPort>([this](std::string_view packet) { return mWatcher.observe(packet); });
+    mOscPort = std::make_unique<OscPort>([this](std::string_view packet) { return mCompletions.observe(packet) || mSignatures.observe(packet) || mWatcher.observe(packet); });
     mOutbox = std::make_unique<SclangOutbox>();
     mCode = std::make_unique<CodeController>(defaultCode(), codeHooks());
     mGui = std::make_unique<PluginGui>(mHost, mHostTimer, mHostFd, editorActions(), mPostLog, loadExamples(pluginResourcesDir() / "examples"));
@@ -163,13 +167,23 @@ void Plugin::onTimer(clap_id timerId) {
     pollSclang();
 }
 
-void Plugin::onMainThread() { applyParameterEvents(); }
+void Plugin::onMainThread() {
+    applyParameterEvents();
+    showLanguageReplies();
+}
 
 void Plugin::applyParameterEvents() {
     const ParameterBank::Changes changes = mParameters.apply(mWatcher.takeEvents());
     const clap_param_rescan_flags flags = (changes.info ? CLAP_PARAM_RESCAN_INFO | CLAP_PARAM_RESCAN_TEXT : 0) | (changes.values ? CLAP_PARAM_RESCAN_VALUES : 0);
     if (flags && mHostParams && mHostParams->rescan)
         mHostParams->rescan(mHost, flags);
+}
+
+void Plugin::showLanguageReplies() {
+    for (const Completion& completion : mCompletions.take())
+        mGui->showCompletion(completion);
+    for (const SignatureHelp& help : mSignatures.take())
+        mGui->showSignatureHelp(help);
 }
 
 void Plugin::pollSclang() {
@@ -199,6 +213,16 @@ void Plugin::evaluate(const std::string& code) {
         mSclang->evaluate(code);
 }
 
+void Plugin::complete(const std::string& line) {
+    if (mSclang)
+        mSclang->complete(line);
+}
+
+void Plugin::lookUpSignatures(const std::string& callee) {
+    if (mSclang)
+        mSclang->lookUpSignatures(callee);
+}
+
 void Plugin::stopSound() {
     if (mSclang)
         mSclang->stopSound();
@@ -226,6 +250,8 @@ EditorActions Plugin::editorActions() {
         .stop = [this] { stopSound(); },
         .rebootInterpreter = [this] { rebootInterpreter(); },
         .codeChanged = [this](const std::string& code) { mCode->edit(code); },
+        .complete = [this](const std::string& line) { complete(line); },
+        .lookUpSignatures = [this](const std::string& callee) { lookUpSignatures(callee); },
         .open = [this] { mCode->open(); },
         .save = [this](const std::string& code) { mCode->save(code); },
         .saveAs = [this](const std::string& code) { mCode->saveAs(code); },

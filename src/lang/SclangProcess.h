@@ -42,6 +42,8 @@ public:
     void serverStopped();
     void run(const std::string& code);
     void evaluate(const std::string& code);
+    void complete(const std::string& line);
+    void lookUpSignatures(const std::string& callee);
     void stopSound();
 
 private:

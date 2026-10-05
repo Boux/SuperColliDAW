@@ -15,7 +15,7 @@ public:
 
     void draw(const ImVec2& size);
     bool focused() const { return mFocused; }
-    const TextEditor& viewer() const { return mViewer; }
+    TextEditor& viewer() { return mViewer; }
 
 private:
     void drawContents();

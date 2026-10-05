@@ -1,10 +1,8 @@
 #include "ParameterWatcher.h"
 
+#include "engine/OscMessage.h"
 #include "engine/SynthDefControls.h"
 
-#include "sc_msg_iter.h"
-
-#include <cstring>
 #include <fstream>
 #include <iterator>
 #include <unordered_map>
@@ -16,25 +14,7 @@ namespace {
 
 constexpr std::string_view kBundleTag("#bundle\0", 8);
 constexpr size_t kBundleHeaderSize = 16;
-constexpr char kDeclareAddress[] = "/supercollidaw/param";
-
-struct Message {
-    std::string_view address;
-    sc_msg_iter args;
-};
-
-Message parseMessage(std::string_view message) {
-    const char* address = message.data();
-    const char* args = OSCstrskip(address);
-    const int argsSize = static_cast<int>(message.data() + message.size() - args);
-    return { std::string_view(address), sc_msg_iter(argsSize, args) };
-}
-
-// sc_msg_iter::gets returns null, not the default, once the arguments run out.
-std::string stringArg(sc_msg_iter& args, const char* fallback) {
-    const char* value = args.gets(fallback);
-    return value ? value : fallback;
-}
+constexpr std::string_view kDeclareAddress = "/supercollidaw/param";
 
 std::string readBlob(sc_msg_iter& args) {
     std::string blob(args.getbsize(), '\0');
@@ -63,8 +43,8 @@ ParameterDeclared readDeclaration(sc_msg_iter& args) {
 }
 
 bool ParameterWatcher::observe(std::string_view packet) {
-    if (packet.size() >= sizeof(kDeclareAddress) && !std::memcmp(packet.data(), kDeclareAddress, sizeof(kDeclareAddress))) {
-        Message message = parseMessage(packet);
+    if (hasAddress(packet, kDeclareAddress)) {
+        OscMessage message = parseOscMessage(packet);
         push(readDeclaration(message.args));
         return true;
     }
@@ -106,7 +86,7 @@ void ParameterWatcher::observeMessage(std::string_view packet) {
     };
     if (packet.empty() || packet.front() != '/')
         return;
-    Message message = parseMessage(packet);
+    OscMessage message = parseOscMessage(packet);
     const auto handler = kHandlers.find(message.address);
     if (handler != kHandlers.end())
         (this->*handler->second)(message.args);
@@ -121,8 +101,8 @@ void ParameterWatcher::onDefinitionReceived(sc_msg_iter& args) {
 void ParameterWatcher::onDefinitionFile(sc_msg_iter& args) { observeDefinitions(readFile(stringArg(args, ""))); }
 
 void ParameterWatcher::onDefinitionFreed(sc_msg_iter& args) {
-    while (args.nextTag('\0') == 's')
-        push(SynthDefFreed{ stringArg(args, "") });
+    for (std::string& name : remainingStrings(args))
+        push(SynthDefFreed{ std::move(name) });
 }
 
 void ParameterWatcher::observeDefinitions(std::string_view scgf) {

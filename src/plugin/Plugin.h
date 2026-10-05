@@ -2,6 +2,8 @@
 
 #include "PluginGui.h"
 #include "code/CodeController.h"
+#include "code/LanguageReplies.h"
+#include "code/ReplyInbox.h"
 #include "engine/Engine.h"
 #include "engine/OscPort.h"
 #include "lang/PostLog.h"
@@ -46,12 +48,15 @@ private:
     void onTimer(clap_id timerId);
     void onMainThread();
     void applyParameterEvents();
+    void showLanguageReplies();
     void pollSclang();
 
     void startSclang();
     void stopSclang();
     void run(const std::string& code);
     void evaluate(const std::string& code);
+    void complete(const std::string& line);
+    void lookUpSignatures(const std::string& callee);
     void stopSound();
     void rebootInterpreter();
     void markProjectDirty();
@@ -82,6 +87,8 @@ private:
     PostLog mPostLog;
     ParameterBank mParameters;
     ParameterWatcher mWatcher;
+    ReplyInbox<Completion> mCompletions;
+    ReplyInbox<SignatureHelp> mSignatures;
     std::unique_ptr<OscPort> mOscPort;
     std::unique_ptr<SclangOutbox> mOutbox;
     std::unique_ptr<SclangProcess> mSclang;

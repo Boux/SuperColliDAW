@@ -86,6 +86,10 @@ void SclangProcess::run(const std::string& code) { send("SuperColliDAW.run(" + s
 
 void SclangProcess::evaluate(const std::string& code) { send("SuperColliDAW.evaluate(" + scStringLiteral(code) + ")"); }
 
+void SclangProcess::complete(const std::string& line) { send("SuperColliDAWCompletion.send(" + scStringLiteral(line) + ")"); }
+
+void SclangProcess::lookUpSignatures(const std::string& callee) { send("SuperColliDAWSignatures.send(" + scStringLiteral(callee) + ")"); }
+
 void SclangProcess::stopSound() { send("SuperColliDAW.stop"); }
 
 void SclangProcess::send(const std::string& expression) { mStdin->write(expression + ";" + kInterpretSilently); }

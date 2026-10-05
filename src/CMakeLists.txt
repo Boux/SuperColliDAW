@@ -4,6 +4,7 @@ target_include_directories(supercollidaw_text PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
 add_library(supercollidaw_engine OBJECT
     engine/Engine.cpp
     engine/InstalledSuperCollider.cpp
+    engine/OscMessage.cpp
     engine/OscPort.cpp
     engine/SampleClock.cpp
     engine/SC_PluginDriver.cpp
@@ -23,13 +24,19 @@ target_include_directories(supercollidaw_lang PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
 target_link_libraries(supercollidaw_lang PUBLIC scsynth_embedded tiny-process-library supercollidaw_text)
 
 add_library(supercollidaw_ui OBJECT
+    ui/CallContext.cpp
+    ui/CodeCompletion.cpp
+    ui/CodeEditor.cpp
+    ui/CodeFlash.cpp
     ui/CodeRegion.cpp
+    ui/CodeScanner.cpp
     ui/EditorView.cpp
     ui/EditorWindow.cpp
     ui/ExamplesPanel.cpp
     ui/PostWindow.cpp
     ui/PuglClipboard.cpp
     ui/PuglImGuiInput.cpp
+    ui/SignatureHint.cpp
     ui/SuperColliderLanguage.cpp
     ${CMAKE_SOURCE_DIR}/third_party/ImGuiColorTextEdit/example/dejavu.cpp
 )
@@ -43,6 +50,7 @@ add_library(supercollidaw_clap MODULE
     plugin/PluginPaths.cpp
     plugin/code/CodeController.cpp
     plugin/code/CodeDocument.cpp
+    plugin/code/LanguageReplies.cpp
     plugin/code/DefaultCode.cpp
     plugin/code/Examples.cpp
     plugin/code/FileDialog.cpp

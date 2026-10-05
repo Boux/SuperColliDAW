@@ -27,6 +27,7 @@ constexpr uint32_t kChannels = 2;
 std::set<clap_id> gTimers;
 std::set<int> gFds;
 int gFdCallbacks = 0;
+std::atomic<bool> gCallbackRequested = false;
 
 const clap_host_posix_fd_support kHostFdSupport = {
     .register_fd = [](const clap_host*, int fd, clap_posix_fd_flags_t) { return gFds.insert(fd).second; },
@@ -57,7 +58,7 @@ const clap_host kHost = {
     },
     .request_restart = [](const clap_host*) {},
     .request_process = [](const clap_host*) {},
-    .request_callback = [](const clap_host*) {},
+    .request_callback = [](const clap_host*) { gCallbackRequested = true; },
 };
 
 const clap_input_events kNoInputEvents = {
@@ -167,6 +168,8 @@ int main(int argc, char** argv) {
     while (std::chrono::steady_clock::now() < deadline) {
         for (clap_id id : std::set<clap_id>(gTimers))
             timer->on_timer(plugin, id);
+        if (gCallbackRequested.exchange(false))
+            plugin->on_main_thread(plugin);
         for (int fd : std::set<int>(gFds)) {
             pollfd request = { .fd = fd, .events = POLLIN, .revents = 0 };
             if (poll(&request, 1, 0) > 0 && (request.revents & POLLIN)) {

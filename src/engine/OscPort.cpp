@@ -1,25 +1,15 @@
 #include "OscPort.h"
 
 #include "Engine.h"
+#include "OscMessage.h"
 
 #include "SC_ReplyImpl.hpp"
 #include "scsynthsend.h"
-
-#include <cstring>
 
 namespace supercollidaw {
 
 namespace asio = boost::asio;
 using asio::ip::udp;
-
-namespace {
-
-bool isCommand(const char* data, size_t size, const char* command) {
-    const size_t length = std::strlen(command);
-    return size > length && std::memcmp(data, command, length + 1) == 0;
-}
-
-}
 
 OscPort::OscPort(Observer observer): mSocket(mIo, udp::endpoint(asio::ip::address_v4::loopback(), 0)), mObserver(std::move(observer)) {
     startReceive();
@@ -49,9 +39,10 @@ void OscPort::startReceive() {
 }
 
 void OscPort::handlePacket(size_t size) {
-    if (mObserver(std::string_view(mBuffer.data(), size)))
+    const std::string_view packet(mBuffer.data(), size);
+    if (mObserver(packet))
         return;
-    if (isCommand(mBuffer.data(), size, "/quit")) {
+    if (hasAddress(packet, "/quit")) {
         refuse("/quit", "the server lives inside the plugin and cannot be quit");
         return;
     }
@@ -59,7 +50,7 @@ void OscPort::handlePacket(size_t size) {
     if (!mEngine)
         return;
     Client* client = clientFor(mSender);
-    const bool status = isCommand(mBuffer.data(), size, "/status");
+    const bool status = hasAddress(packet, "/status");
     // A host can keep the plugin activated without processing it, and answering every poll queued meanwhile floods sclang.
     if (status && client->statusPending.exchange(true))
         return;
@@ -89,7 +80,7 @@ OscPort::Client* OscPort::clientFor(const udp::endpoint& endpoint) {
 
 void OscPort::reply(ReplyAddress* address, char* data, int size) {
     Client* client = static_cast<Client*>(address->mReplyData);
-    if (isCommand(data, static_cast<size_t>(size), "/status.reply"))
+    if (hasAddress(std::string_view(data, static_cast<size_t>(size)), "/status.reply"))
         client->statusPending = false;
     boost::system::error_code ignored;
     client->owner->mSocket.send_to(asio::buffer(data, size), client->endpoint, 0, ignored);
