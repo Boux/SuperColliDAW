@@ -12,6 +12,7 @@
 #endif
 
 #include <algorithm>
+#include <utility>
 
 namespace supercollidaw {
 
@@ -141,11 +142,14 @@ PuglStatus EditorWindow::handle(const PuglEvent& event) {
 }
 
 PuglStatus EditorWindow::startRenderer() {
-    return ImGui_ImplOpenGL3_Init(kGlslVersion) ? PUGL_SUCCESS : PUGL_BACKEND_FAILED;
+    mRendererStarted = ImGui_ImplOpenGL3_Init(kGlslVersion);
+    return mRendererStarted ? PUGL_SUCCESS : PUGL_BACKEND_FAILED;
 }
 
+// pugl sends PUGL_UNREALIZE even when PUGL_REALIZE failed, and ImGui keeps no renderer after a failed init.
 PuglStatus EditorWindow::stopRenderer() {
-    ImGui_ImplOpenGL3_Shutdown();
+    if (std::exchange(mRendererStarted, false))
+        ImGui_ImplOpenGL3_Shutdown();
     return PUGL_SUCCESS;
 }
 
