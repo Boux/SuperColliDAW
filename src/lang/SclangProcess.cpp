@@ -7,10 +7,15 @@
 #include <boost/asio/ip/udp.hpp>
 
 #include <chrono>
+#include <cstring>
 #include <thread>
+#include <vector>
 
-// TODO(windows): read the environment with GetEnvironmentStringsW; environ is POSIX only.
+#if defined(_WIN32)
+#    include <windows.h>
+#else
 extern char** environ;
+#endif
 
 namespace supercollidaw {
 
@@ -27,10 +32,28 @@ uint16_t freeUdpPort() {
     return socket.local_endpoint().port();
 }
 
+#if defined(_WIN32)
+// The ANSI block, because tiny-process-library starts the process with the ANSI CreateProcess.
+std::vector<std::string> environmentVariables() {
+    char* block = GetEnvironmentStrings();
+    std::vector<std::string> variables;
+    for (const char* entry = block; *entry; entry += std::strlen(entry) + 1)
+        variables.emplace_back(entry);
+    FreeEnvironmentStringsA(block);
+    return variables;
+}
+#else
+std::vector<std::string> environmentVariables() {
+    std::vector<std::string> variables;
+    for (char** entry = environ; *entry; ++entry)
+        variables.emplace_back(*entry);
+    return variables;
+}
+#endif
+
 TinyProcessLib::Process::environment_type environmentWith(const TinyProcessLib::Process::environment_type& additions) {
     TinyProcessLib::Process::environment_type environment;
-    for (char** entry = environ; *entry; ++entry) {
-        const std::string variable(*entry);
+    for (const std::string& variable : environmentVariables()) {
         const size_t separator = variable.find('=');
         if (separator != std::string::npos)
             environment[variable.substr(0, separator)] = variable.substr(separator + 1);

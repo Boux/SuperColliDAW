@@ -15,19 +15,27 @@ constexpr uint32_t kMinWidth = 400;
 constexpr uint32_t kMinHeight = 300;
 constexpr uint32_t kFrameIntervalMs = 16;
 
-bool isEmbeddedX11(const char* api, bool isFloating) { return !isFloating && api && !std::strcmp(api, CLAP_WINDOW_API_X11); }
+#if defined(_WIN32)
+constexpr const char* kWindowApi = CLAP_WINDOW_API_WIN32;
+PuglNativeView nativeParent(const clap_window& window) { return reinterpret_cast<PuglNativeView>(window.win32); }
+#else
+constexpr const char* kWindowApi = CLAP_WINDOW_API_X11;
+PuglNativeView nativeParent(const clap_window& window) { return static_cast<PuglNativeView>(window.x11); }
+#endif
+
+bool isEmbeddedNative(const char* api, bool isFloating) { return !isFloating && api && !std::strcmp(api, kWindowApi); }
 
 }
 
 const clap_plugin_gui PluginGui::kExtension = {
-    .is_api_supported = [](const clap_plugin*, const char* api, bool isFloating) { return isEmbeddedX11(api, isFloating); },
+    .is_api_supported = [](const clap_plugin*, const char* api, bool isFloating) { return isEmbeddedNative(api, isFloating); },
     .get_preferred_api = [](const clap_plugin*, const char** api, bool* isFloating) {
-        *api = CLAP_WINDOW_API_X11;
+        *api = kWindowApi;
         *isFloating = false;
         return true;
     },
     .create = [](const clap_plugin* plugin, const char* api, bool isFloating) {
-        return isEmbeddedX11(api, isFloating) && from(plugin).create();
+        return isEmbeddedNative(api, isFloating) && from(plugin).create();
     },
     .destroy = [](const clap_plugin* plugin) { from(plugin).destroy(); },
     .set_scale = [](const clap_plugin* plugin, double scale) { return from(plugin).setScale(scale); },
@@ -104,8 +112,7 @@ bool PluginGui::setScale(double scale) {
 }
 
 bool PluginGui::setParent(const clap_window* window) {
-    const auto parent = static_cast<PuglNativeView>(window->x11);
-    mWindow = std::make_unique<EditorWindow>(parent, mWidth, mHeight, mScale, [this] { mView.draw(); });
+    mWindow = std::make_unique<EditorWindow>(nativeParent(*window), mWidth, mHeight, mScale, [this] { mView.draw(); });
     if (!mWindow->isRealized()) {
         mWindow.reset();
         return false;

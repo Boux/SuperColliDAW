@@ -12,8 +12,14 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
+# A DAW loads the plugin from its CLAP folder, where Windows does not look for the DLLs the plugin depends on.
+if(MINGW)
+    set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
+endif()
+
 include(cmake/patches.cmake)
 include(cmake/scsynth.cmake)
+include(cmake/ugens.cmake)
 include(cmake/embed.cmake)
 include(cmake/resources.cmake)
 include(cmake/ui.cmake)

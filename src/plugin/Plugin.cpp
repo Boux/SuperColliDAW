@@ -140,7 +140,7 @@ void Plugin::stopSclang() {
 // TODO: keep the World when the sample rate is unchanged; hosts restart processing on routing or latency changes, which wipes the running server.
 bool Plugin::activate(double sampleRate, uint32_t maxFrames) {
     auto engine = std::make_unique<Engine>(
-        Engine::Config{ sampleRate, kNumChannels, kNumChannels, installedUGenPluginPath(), [this](const std::string& line) { post(line); } });
+        Engine::Config{ sampleRate, kNumChannels, kNumChannels, ugenPluginPath(pluginResourcesDir() / "plugins"), [this](const std::string& line) { post(line); } });
     if (!engine->isRunning())
         return false;
     mSilence.assign(maxFrames, 0.f);
