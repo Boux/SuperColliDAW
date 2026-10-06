@@ -42,6 +42,12 @@ TextEditor::DocSelection selectionOrLine(const TextEditor& editor) {
     return wholeLines({ line, line });
 }
 
+void configureEditor(TextEditor& editor, const EditorSettings& settings) {
+    editor.SetTabSize(static_cast<size_t>(settings.tabSize));
+    editor.SetInsertSpacesOnTabs(settings.indentWithSpaces);
+    editor.SetCompletePairedGlyphs(settings.closeBrackets);
+}
+
 LineRange linesIn(const TextEditor::DocSelection& section) {
     const bool endsAtLineStart = section.end.index == 0 && section.end.line > section.start.line;
     return { section.start.line, section.end.line - (endsAtLineStart ? 1 : 0) };
@@ -69,15 +75,20 @@ EditorView::EditorView(EditorActions actions, const PostLog& postLog, std::vecto
     mPostHeight(kInitialPostHeight),
     mExamplesShare(kInitialExamplesShare) {
     mEditor.SetLanguage(superColliderLanguage());
-    mEditor.SetTabSize(4);
     mEditor.SetShowMatchingBrackets(true);
     mEditor.SetShowWhitespacesEnabled(false);
     mEditor.SetChangeCallback([this] { mActions.codeChanged(mEditor.GetText()); }, kCodeChangedDelayMs);
+    applyEditorSettings();
 }
 
 void EditorView::setCode(const std::string& code) { mEditor.SetText(code); }
 
 void EditorView::replaceCode(const std::string& code) { mEditor.ReplaceSectionText(wholeLines({ 0, mEditor.GetLineCount() - 1 }), code); }
+
+void EditorView::setSettings(EditorSettings settings) {
+    mSettings = std::move(settings);
+    applyEditorSettings();
+}
 
 void EditorView::setFixedFonts(const FixedFonts& fonts) {
     mFixedFonts = fonts;
@@ -101,13 +112,19 @@ void EditorView::draw() {
 }
 
 void EditorView::drawCodeAndPost() {
+    if (!mShowPost)
+        return drawCode(ImVec2(0.f, 0.f));
     const float available = ImGui::GetContentRegionAvail().y - kSplitterThickness - 2.f * ImGui::GetStyle().ItemSpacing.y;
     mPostHeight = std::clamp(mPostHeight, kMinPaneHeight, std::max(kMinPaneHeight, available - kMinPaneHeight));
-    mEditor.draw("code", ImVec2(0.f, available - mPostHeight));
-    mCompletion.update();
-    mSignatureHint.update();
+    drawCode(ImVec2(0.f, available - mPostHeight));
     mPostHeight -= splitterDrag("post splitter", ImVec2(-1.f, kSplitterThickness), ImGuiMouseCursor_ResizeNS).y;
     mPostWindow.draw(ImVec2(0.f, 0.f));
+}
+
+void EditorView::drawCode(const ImVec2& size) {
+    mEditor.draw("code", size);
+    mCompletion.update();
+    mSignatureHint.update();
 }
 
 void EditorView::drawExamples(float width) {
@@ -134,7 +151,9 @@ void EditorView::drawToolbar() {
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemSpacing.x * 4.f);
     drawStatus();
     ImGui::SameLine();
-    alignRight(mIcons.frameSize().x * 2.f + ImGui::GetStyle().ItemSpacing.x);
+    alignRight(mIcons.rowWidth(3));
+    drawPostButton();
+    ImGui::SameLine();
     drawExamplesButton();
     ImGui::SameLine();
     drawSettingsButton();
@@ -149,6 +168,11 @@ void EditorView::drawFileButtons() {
     ImGui::SameLine();
     if (mIcons.button(kIconSavePen, "Save as (Ctrl+Shift+S)\nSave to a new .scd file"))
         mActions.saveAs(mEditor.GetText());
+}
+
+void EditorView::drawPostButton() {
+    if (mIcons.button(kIconSquareTerminal, mShowPost ? "Hide post window" : "Post window\nWhat sclang and the server print"))
+        mShowPost = !mShowPost;
 }
 
 void EditorView::drawExamplesButton() {
@@ -169,9 +193,16 @@ void EditorView::drawSettingsButton() {
 void EditorView::drawSettingsPopup(float textSize) {
     if (!ImGui::BeginPopup("settings"))
         return;
-    if (drawSettingsForm(mSettings, textSize))
+    if (drawSettingsForm(mSettings, textSize)) {
+        applyEditorSettings();
         mActions.settingsChanged(mSettings);
+    }
     ImGui::EndPopup();
+}
+
+void EditorView::applyEditorSettings() {
+    configureEditor(mEditor, mSettings);
+    configureEditor(mExamples.viewer(), mSettings);
 }
 
 // The icons have their own base size, so the text can be shorter or taller than the buttons and is centered on their row by hand.

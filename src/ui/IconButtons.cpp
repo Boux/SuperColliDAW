@@ -42,4 +42,6 @@ ImVec2 IconButtons::frameSize() const {
     return size;
 }
 
+float IconButtons::rowWidth(int count) const { return static_cast<float>(count) * frameSize().x + static_cast<float>(count - 1) * ImGui::GetStyle().ItemSpacing.x; }
+
 }

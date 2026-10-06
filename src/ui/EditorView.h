@@ -22,7 +22,7 @@ public:
     void setCode(const std::string& code);
     void replaceCode(const std::string& code);
     void setStatus(EditorStatus status) { mStatus = std::move(status); }
-    void setSettings(EditorSettings settings) { mSettings = std::move(settings); }
+    void setSettings(EditorSettings settings);
     const EditorSettings& settings() const { return mSettings; }
     void setFixedFonts(const FixedFonts& fonts);
     void showCompletion(const Completion& completion) { mCompletion.show(completion); }
@@ -32,11 +32,14 @@ public:
 private:
     void drawToolbar();
     void drawFileButtons();
+    void drawPostButton();
     void drawExamplesButton();
     void drawSettingsButton();
     void drawSettingsPopup(float textSize);
+    void applyEditorSettings();
     void drawStatus();
     void drawCodeAndPost();
+    void drawCode(const ImVec2& size);
     void drawExamples(float width);
     float examplesWidth(float width) const;
     void handleShortcuts();
@@ -58,6 +61,7 @@ private:
     float mPostHeight;
     float mExamplesShare;
     bool mShowExamples = false;
+    bool mShowPost = true;
 };
 
 }

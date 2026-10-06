@@ -16,6 +16,7 @@ public:
     void setFont(ImFont* font) { mFont = font; }
     bool button(const char* icon, const char* tooltip) const;
     ImVec2 frameSize() const;
+    float rowWidth(int count) const;
 
 private:
     float iconSize() const { return kIconSize * static_cast<float>(mSettings.fontSizePercent) / 100.f; }

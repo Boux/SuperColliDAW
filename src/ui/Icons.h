@@ -12,5 +12,6 @@ constexpr char kIconSave[] = "\ue14d";
 constexpr char kIconSavePen[] = "\ue705";
 constexpr char kIconSettings[] = "\ue154";
 constexpr char kIconSquare[] = "\ue167";
+constexpr char kIconSquareTerminal[] = "\ue20a";
 
 }

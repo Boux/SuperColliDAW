@@ -7,7 +7,6 @@ namespace supercollidaw {
 
 ExamplesPanel::ExamplesPanel(std::vector<Example> examples, const IconButtons& icons): mExamples(std::move(examples)), mIcons(icons) {
     mViewer.SetLanguage(superColliderLanguage());
-    mViewer.SetTabSize(4);
     mViewer.SetReadOnlyEnabled(true);
     mViewer.SetShowMatchingBrackets(true);
     mViewer.SetShowWhitespacesEnabled(false);

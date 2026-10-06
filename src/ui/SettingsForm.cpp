@@ -4,18 +4,26 @@
 
 #include <imgui.h>
 
+#include <ranges>
+#include <string>
+
 namespace supercollidaw {
 
 namespace {
 
-bool drawFontCombo(EditorSettings& settings) {
-    if (!ImGui::BeginCombo("Font", settings.font.c_str()))
+std::string choiceName(const std::string& value) { return value; }
+std::string choiceName(int value) { return std::to_string(value); }
+
+// Lists the choices by name and stores the picked one; returns true on a pick.
+template <typename Value, typename Choices>
+bool drawCombo(const char* label, Value& selected, const Choices& choices) {
+    if (!ImGui::BeginCombo(label, choiceName(selected).c_str()))
         return false;
     bool changed = false;
-    for (const BundledFont& font : bundledFonts()) {
-        if (!ImGui::Selectable(font.name, settings.font == font.name))
+    for (const Value choice : choices) {
+        if (!ImGui::Selectable(choiceName(choice).c_str(), selected == choice))
             continue;
-        settings.font = font.name;
+        selected = choice;
         changed = true;
     }
     ImGui::EndCombo();
@@ -35,9 +43,13 @@ bool drawFontSize(EditorSettings& settings, float textSize) {
 }
 
 bool drawSettingsForm(EditorSettings& settings, float textSize) {
-    const bool fontChanged = drawFontCombo(settings);
+    const bool fontChanged = drawCombo("Font", settings.font, bundledFonts() | std::views::transform(&BundledFont::name));
     const bool sizeChanged = drawFontSize(settings, textSize);
-    return fontChanged || sizeChanged;
+    ImGui::Separator();
+    const bool tabSizeChanged = drawCombo("Tab size", settings.tabSize, EditorSettings::kTabSizes);
+    const bool indentChanged = ImGui::Checkbox("Indent with spaces", &settings.indentWithSpaces);
+    const bool bracketsChanged = ImGui::Checkbox("Close brackets and quotes", &settings.closeBrackets);
+    return fontChanged || sizeChanged || tabSizeChanged || indentChanged || bracketsChanged;
 }
 
 }

@@ -2,14 +2,13 @@
 
 #include <algorithm>
 #include <charconv>
+#include <numeric>
 #include <ranges>
 
 namespace supercollidaw {
 
 namespace {
 
-constexpr std::string_view kFontKey = "font";
-constexpr std::string_view kFontSizeKey = "font_size_percent";
 constexpr std::string_view kBlank = " \t\r";
 
 std::string_view trimmed(std::string_view text) {
@@ -17,19 +16,52 @@ std::string_view trimmed(std::string_view text) {
     return first == std::string_view::npos ? std::string_view() : text.substr(first, text.find_last_not_of(kBlank) - first + 1);
 }
 
-int parsePercent(std::string_view text, int fallback) {
-    int percent = 0;
-    const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), percent);
+std::optional<int> parseInt(std::string_view text) {
+    int value = 0;
+    const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
     if (error != std::errc() || end != text.data() + text.size())
-        return fallback;
-    return std::clamp(percent, EditorSettings::kMinFontSizePercent, EditorSettings::kMaxFontSizePercent);
+        return std::nullopt;
+    return value;
 }
 
+int parsePercent(std::string_view text, int fallback) {
+    const std::optional<int> percent = parseInt(text);
+    return percent ? std::clamp(*percent, EditorSettings::kMinFontSizePercent, EditorSettings::kMaxFontSizePercent) : fallback;
+}
+
+int parseTabSize(std::string_view text, int fallback) {
+    const std::optional<int> size = parseInt(text);
+    return size && std::ranges::find(EditorSettings::kTabSizes, *size) != EditorSettings::kTabSizes.end() ? *size : fallback;
+}
+
+bool parseFlag(std::string_view text, bool fallback) {
+    if (text == "true")
+        return true;
+    if (text == "false")
+        return false;
+    return fallback;
+}
+
+std::string formatFlag(bool flag) { return flag ? "true" : "false"; }
+
+struct SettingEntry {
+    std::string_view key;
+    void (*read)(EditorSettings& settings, std::string_view value);
+    std::string (*write)(const EditorSettings& settings);
+};
+
+constexpr SettingEntry kEntries[] = {
+    { "font", [](EditorSettings& settings, std::string_view value) { settings.font = value; }, [](const EditorSettings& settings) { return settings.font; } },
+    { "font_size_percent", [](EditorSettings& settings, std::string_view value) { settings.fontSizePercent = parsePercent(value, settings.fontSizePercent); }, [](const EditorSettings& settings) { return std::to_string(settings.fontSizePercent); } },
+    { "tab_size", [](EditorSettings& settings, std::string_view value) { settings.tabSize = parseTabSize(value, settings.tabSize); }, [](const EditorSettings& settings) { return std::to_string(settings.tabSize); } },
+    { "indent_with_spaces", [](EditorSettings& settings, std::string_view value) { settings.indentWithSpaces = parseFlag(value, settings.indentWithSpaces); }, [](const EditorSettings& settings) { return formatFlag(settings.indentWithSpaces); } },
+    { "close_brackets", [](EditorSettings& settings, std::string_view value) { settings.closeBrackets = parseFlag(value, settings.closeBrackets); }, [](const EditorSettings& settings) { return formatFlag(settings.closeBrackets); } },
+};
+
 void applyEntry(EditorSettings& settings, std::string_view key, std::string_view value) {
-    if (key == kFontKey)
-        settings.font = value;
-    if (key == kFontSizeKey)
-        settings.fontSizePercent = parsePercent(value, settings.fontSizePercent);
+    const auto entry = std::ranges::find(kEntries, key, &SettingEntry::key);
+    if (entry != std::ranges::end(kEntries))
+        entry->read(settings, value);
 }
 
 }
@@ -46,7 +78,7 @@ EditorSettings parseSettings(std::string_view text) {
 }
 
 std::string formatSettings(const EditorSettings& settings) {
-    return std::string(kFontKey) + " = " + settings.font + "\n" + std::string(kFontSizeKey) + " = " + std::to_string(settings.fontSizePercent) + "\n";
+    return std::accumulate(std::begin(kEntries), std::end(kEntries), std::string(), [&](std::string text, const SettingEntry& entry) { return std::move(text) + std::string(entry.key) + " = " + entry.write(settings) + "\n"; });
 }
 
 EditorSettings SettingsFile::load() {
