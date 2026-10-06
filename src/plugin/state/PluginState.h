@@ -21,7 +21,7 @@ struct ParameterState {
 
 struct PluginState {
     std::string code;
-    std::string linkedPath;
+    std::string filePath;
     std::vector<ParameterState> parameters;
 };
 

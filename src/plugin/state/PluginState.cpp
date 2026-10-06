@@ -129,7 +129,7 @@ std::string encodeState(const PluginState& state) {
     writer.raw(kMagic);
     writer.uint32(kVersion);
     writer.string(state.code);
-    writer.string(state.linkedPath);
+    writer.string(state.filePath);
     writer.uint32(static_cast<uint32_t>(state.parameters.size()));
     for (const ParameterState& parameter : state.parameters)
         writeParameter(writer, parameter);

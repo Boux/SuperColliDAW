@@ -260,6 +260,7 @@ CodeController::Hooks Plugin::codeHooks() {
         .post = [this](const std::string& line) { post(line); },
         .markProjectDirty = [this] { markProjectDirty(); },
         .showCode = [this](const std::string& code) { mGui->setCode(code); },
+        .replaceCode = [this](const std::string& code) { mGui->replaceCode(code); },
         .showStatus = [this](const EditorStatus& status) { mGui->setStatus(status); },
     };
 }
@@ -276,7 +277,6 @@ EditorActions Plugin::editorActions() {
         .open = [this] { mCode->open(); },
         .save = [this](const std::string& code) { mCode->save(code); },
         .saveAs = [this](const std::string& code) { mCode->saveAs(code); },
-        .unlink = [this](const std::string& code) { mCode->unlink(code); },
         .settingsChanged = [this](const EditorSettings& settings) { saveSettings(settings); },
     };
 }

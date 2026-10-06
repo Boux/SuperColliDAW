@@ -4,18 +4,9 @@
 
 namespace supercollidaw {
 
-namespace {
-
-constexpr char kEmbeddedSource[] = "Embedded in the project";
-
-}
-
 CodeController::CodeController(std::string initialCode, Hooks hooks): mDocument(std::move(initialCode)), mHooks(std::move(hooks)) {}
 
-EditorStatus CodeController::status() const {
-    const std::string source = mDocument.isLinked() ? mDocument.linkedPath().string() : kEmbeddedSource;
-    return { source, mDocument.isLinked(), mDocument.isDirty() };
-}
+EditorStatus CodeController::status() const { return { mDocument.filePath().string(), mDocument.isDirty() }; }
 
 void CodeController::edit(const std::string& code) {
     if (code == mDocument.text())
@@ -34,10 +25,10 @@ void CodeController::open() { startDialog(FileDialog::Kind::open); }
 
 void CodeController::save(const std::string& code) {
     edit(code);
-    if (!mDocument.isLinked())
+    if (!mDocument.hasFile())
         return startDialog(FileDialog::Kind::save);
     if (!mDocument.save())
-        mHooks.post("SuperColliDAW: could not save " + mDocument.linkedPath().string());
+        mHooks.post("SuperColliDAW: could not save " + mDocument.filePath().string());
     mHooks.showStatus(status());
 }
 
@@ -46,20 +37,13 @@ void CodeController::saveAs(const std::string& code) {
     startDialog(FileDialog::Kind::save);
 }
 
-void CodeController::unlink(const std::string& code) {
-    edit(code);
-    mDocument.unlink();
-    documentChanged();
-}
-
 void CodeController::poll() {
     pollDialog();
-    pollLinkedFile();
+    pollFile();
 }
 
 void CodeController::restore(const PluginState& state) {
-    if (!mDocument.restore(state))
-        mHooks.post("SuperColliDAW: " + state.linkedPath + " could not be read. Using the copy saved in the project.");
+    mDocument.restore(state);
     mHooks.showCode(mDocument.text());
     mHooks.showStatus(status());
     mHooks.run(mDocument.text());
@@ -68,7 +52,7 @@ void CodeController::restore(const PluginState& state) {
 void CodeController::startDialog(FileDialog::Kind kind) {
     if (mDialog)
         return;
-    const std::filesystem::path start = mDocument.isLinked() ? mDocument.linkedPath() : userDataDir();
+    const std::filesystem::path start = mDocument.hasFile() ? mDocument.filePath() : userDataDir();
     mDialog = std::make_unique<FileDialog>(kind, start);
 }
 
@@ -85,25 +69,18 @@ void CodeController::pollDialog() {
         saveChosen(*path);
 }
 
-void CodeController::pollLinkedFile() {
-    const CodeDocument::FileChange change = mDocument.reloadIfChanged();
-    if (change == CodeDocument::FileChange::conflict)
-        mHooks.post("SuperColliDAW: " + mDocument.linkedPath().string() + " changed on disk, but the editor has unsaved changes. "
-                    "Save to overwrite the file, or open it again to discard your changes.");
-    if (change != CodeDocument::FileChange::reloaded)
-        return;
-    documentChanged();
-    mHooks.showCode(mDocument.text());
-    mHooks.run(mDocument.text());
+void CodeController::pollFile() {
+    if (mDocument.refreshFileText())
+        mHooks.showStatus(status());
 }
 
 void CodeController::openChosen(const std::filesystem::path& path) {
-    if (!mDocument.link(path)) {
+    if (!mDocument.open(path)) {
         mHooks.post("SuperColliDAW: could not read " + path.string());
         return;
     }
     documentChanged();
-    mHooks.showCode(mDocument.text());
+    mHooks.replaceCode(mDocument.text());
     mHooks.run(mDocument.text());
 }
 

@@ -500,18 +500,21 @@ void testStateRestoresCode(const clap_plugin_factory* factory) {
     writeCode(kTestSineHz);
 }
 
-void testLinkedFileRerunsWhenSaved(const clap_plugin_factory* factory) {
-    const std::filesystem::path linked = gCodeFile.parent_path() / "linked.scd";
-    writeCode(linked, 660.0);
+void testFileIsNeverLoadedOnItsOwn(const clap_plugin_factory* factory) {
+    const std::filesystem::path file = gCodeFile.parent_path() / "opened.scd";
+    writeCode(file, 880.0);
     Instance instance(factory, 48000.0);
     instance.waitForSound();
-    check(instance.loadState(supercollidaw::encodeState({ sineCode(660.0), linked.string() })), "a state linking a file loads");
-    std::printf("  linked file: frequency %.2f Hz\n", instance.waitForFrequency(660.0));
-    writeCode(linked, 880.0);
+    check(instance.loadState(supercollidaw::encodeState({ sineCode(660.0), file.string() })), "a state with a file path loads");
+    const double restored = instance.waitForFrequency(660.0);
+    std::printf("  restored while the file plays 880 Hz: frequency %.2f Hz\n", restored);
+    check(std::fabs(restored - 660.0) <= 4.0, "a loaded state runs its own code and leaves the file alone");
+    writeCode(file, 440.0);
     instance.fireTimer();
-    const double frequency = instance.waitForFrequency(880.0);
-    std::printf("  after saving the linked file: frequency %.2f Hz\n", frequency);
-    check(std::fabs(frequency - 880.0) <= 4.0, "saving the linked file re-runs it");
+    instance.idle(1.0);
+    const double frequency = estimateFrequency(instance.runSilence(0.5, kMaxFrames), 48000.0);
+    std::printf("  after another instance saves the file: frequency %.2f Hz\n", frequency);
+    check(std::fabs(frequency - 660.0) <= 4.0, "saving the file elsewhere never changes this instance");
 }
 
 void testReactivationKeepsServerNotifications(const clap_plugin_factory* factory) {
@@ -1072,7 +1075,7 @@ int main(int argc, char** argv) {
     testTrackInputPassesThroughWithReportedLatency(factory);
     testTwoInstancesRunTogether(factory);
     testStateRestoresCode(factory);
-    testLinkedFileRerunsWhenSaved(factory);
+    testFileIsNeverLoadedOnItsOwn(factory);
     testReactivationKeepsServerNotifications(factory);
     testUnprocessedInstanceRecovers(factory);
     testStuckSclangDoesNotBlockTheHost(factory);

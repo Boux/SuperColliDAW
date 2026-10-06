@@ -37,38 +37,36 @@ std::string readFile(const fs::path& path) {
 void testStateRoundTrip() {
     const PluginState state{ std::string("{ SinOsc.ar }.play;\n\"quoted\" \\ ") + '\0' + "binary", "/tmp/some file.scd" };
     const std::optional<PluginState> decoded = decodeState(encodeState(state));
-    check(decoded && decoded->code == state.code && decoded->linkedPath == state.linkedPath, "state survives encode and decode");
+    check(decoded && decoded->code == state.code && decoded->filePath == state.filePath, "state survives encode and decode");
     check(!decodeState("garbage"), "garbage is rejected");
     check(!decodeState(encodeState(state).substr(0, 12)), "truncated state is rejected");
 }
 
-void testLinkedDocument(const fs::path& dir) {
-    const fs::path file = dir / "linked.scd";
+void testDocumentWithFile(const fs::path& dir) {
+    const fs::path file = dir / "opened.scd";
     writeFile(file, "a");
     CodeDocument document("embedded");
-    check(!document.isLinked() && !document.isDirty(), "a new document is embedded and clean");
-    check(document.link(file) && document.text() == "a", "linking reads the file");
+    check(!document.hasFile() && !document.isDirty(), "a new document has no file and is clean");
+    check(document.open(file) && document.text() == "a" && !document.isDirty(), "opening reads the file");
 
     document.edit("b");
-    check(document.isDirty(), "editing a linked document makes it dirty");
-    check(document.save() && readFile(file) == "b" && !document.isDirty(), "save writes the file and clears dirty");
-    check(document.reloadIfChanged() == CodeDocument::FileChange::none, "our own save is not an external change");
+    check(document.isDirty(), "editing makes the document differ from its file");
+    check(document.save() && readFile(file) == "b" && !document.isDirty(), "save writes the file");
+    check(!document.refreshFileText(), "our own save is not an external change");
 
     writeFile(file, "c");
-    check(document.reloadIfChanged() == CodeDocument::FileChange::reloaded && document.text() == "c", "an external change reloads a clean document");
-
-    document.edit("d");
-    writeFile(file, "e");
-    check(document.reloadIfChanged() == CodeDocument::FileChange::conflict && document.text() == "d", "an external change keeps unsaved edits");
-    check(document.reloadIfChanged() == CodeDocument::FileChange::none, "a conflict is reported once");
+    check(document.refreshFileText() && document.text() == "b" && document.isDirty(), "an external change never replaces the code");
 
     const PluginState state = document.state();
     CodeDocument restored("");
-    check(restored.restore(state) && restored.isLinked() && restored.text() == "e", "restoring a linked state reads the file");
+    restored.restore(state);
+    check(restored.text() == "b" && restored.filePath() == file && restored.isDirty(), "restoring keeps the project's code and the file path");
+    check(restored.save() && readFile(file) == "b" && !restored.isDirty(), "a restored document saves to its file");
 
     fs::remove(file);
     CodeDocument missing("");
-    check(!missing.restore(state) && !missing.isLinked() && missing.text() == "d", "a missing file falls back to the saved copy");
+    missing.restore(state);
+    check(missing.text() == "b" && missing.hasFile() && missing.isDirty(), "a missing file keeps the path for the next save");
 }
 
 }
@@ -77,7 +75,7 @@ int main() {
     char dir[] = "/tmp/supercollidaw-document-XXXXXX";
     const fs::path tempDir = mkdtemp(dir);
     testStateRoundTrip();
-    testLinkedDocument(tempDir);
+    testDocumentWithFile(tempDir);
     fs::remove_all(tempDir);
     std::printf("%d failure(s)\n", gFailures);
     return gFailures == 0 ? 0 : 1;

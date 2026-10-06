@@ -20,6 +20,7 @@ public:
     EditorView(EditorActions actions, const PostLog& postLog, std::vector<Example> examples);
 
     void setCode(const std::string& code);
+    void replaceCode(const std::string& code);
     void setStatus(EditorStatus status) { mStatus = std::move(status); }
     void setSettings(EditorSettings settings) { mSettings = std::move(settings); }
     const EditorSettings& settings() const { return mSettings; }

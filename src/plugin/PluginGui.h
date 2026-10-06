@@ -28,6 +28,7 @@ public:
     bool onTimer(clap_id timerId);
     void onFd(int fd);
     void setCode(const std::string& code) { mView.setCode(code); }
+    void replaceCode(const std::string& code) { mView.replaceCode(code); }
     void setStatus(EditorStatus status) { mView.setStatus(std::move(status)); }
     void setSettings(EditorSettings settings) { mView.setSettings(std::move(settings)); }
     void showCompletion(const Completion& completion) { mView.showCompletion(completion); }

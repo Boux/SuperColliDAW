@@ -75,6 +75,8 @@ EditorView::EditorView(EditorActions actions, const PostLog& postLog, std::vecto
 
 void EditorView::setCode(const std::string& code) { mEditor.SetText(code); }
 
+void EditorView::replaceCode(const std::string& code) { mEditor.ReplaceSectionText(wholeLines({ 0, mEditor.GetLineCount() - 1 }), code); }
+
 void EditorView::setFixedFonts(const FixedFonts& fonts) {
     mFixedFonts = fonts;
     mIcons.setFont(fonts.icons);
@@ -137,19 +139,14 @@ void EditorView::drawToolbar() {
 }
 
 void EditorView::drawFileButtons() {
-    if (mIcons.button(kIconFolderOpen, "Open (Ctrl+O)\nLink this instance to a .scd file"))
+    if (mIcons.button(kIconFolderOpen, "Open (Ctrl+O)\nLoad a .scd file into this instance"))
         mActions.open();
     ImGui::SameLine();
-    if (mIcons.button(kIconSave, "Save the linked file (Ctrl+S)"))
+    if (mIcons.button(kIconSave, "Save (Ctrl+S)\nOverwrite the last opened or saved file"))
         mActions.save(mEditor.GetText());
     ImGui::SameLine();
-    if (mIcons.button(kIconSavePen, "Save as (Ctrl+Shift+S)\nSave to a new .scd file and link to it"))
+    if (mIcons.button(kIconSavePen, "Save as (Ctrl+Shift+S)\nSave to a new .scd file"))
         mActions.saveAs(mEditor.GetText());
-    if (!mStatus.linked)
-        return;
-    ImGui::SameLine();
-    if (mIcons.button(kIconUnlink, "Unlink\nKeep the code in the project and stop following the file"))
-        mActions.unlink(mEditor.GetText());
 }
 
 void EditorView::drawExamplesButton() {
@@ -177,7 +174,7 @@ void EditorView::drawSettingsPopup(float textSize) {
 
 void EditorView::drawStatus() {
     ImGui::AlignTextToFramePadding();
-    ImGui::TextDisabled("%s%s", mStatus.source.c_str(), mStatus.dirty ? " (modified)" : "");
+    ImGui::TextDisabled("%s%s", mStatus.file.c_str(), mStatus.dirty ? " (modified)" : "");
 }
 
 void EditorView::handleShortcuts() {

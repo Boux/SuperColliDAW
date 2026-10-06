@@ -18,6 +18,7 @@ public:
         std::function<void(const std::string& line)> post;
         std::function<void()> markProjectDirty;
         std::function<void(const std::string& code)> showCode;
+        std::function<void(const std::string& code)> replaceCode;
         std::function<void(const EditorStatus& status)> showStatus;
     };
 
@@ -31,7 +32,6 @@ public:
     void open();
     void save(const std::string& code);
     void saveAs(const std::string& code);
-    void unlink(const std::string& code);
     void poll();
 
     PluginState state() const { return mDocument.state(); }
@@ -40,7 +40,7 @@ public:
 private:
     void startDialog(FileDialog::Kind kind);
     void pollDialog();
-    void pollLinkedFile();
+    void pollFile();
     void openChosen(const std::filesystem::path& path);
     void saveChosen(const std::filesystem::path& path);
     void documentChanged();
