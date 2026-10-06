@@ -1,5 +1,7 @@
 #include "ExamplesPanel.h"
 
+#include "IconButton.h"
+#include "Icons.h"
 #include "SuperColliderLanguage.h"
 
 namespace supercollidaw {
@@ -44,9 +46,8 @@ void ExamplesPanel::drawListItem(size_t index) {
 }
 
 void ExamplesPanel::drawCopyButton() {
-    if (ImGui::Button("Copy"))
+    if (iconButton(kIconCopy, "Copy the whole example"))
         ImGui::SetClipboardText(mExamples[mSelected].code.c_str());
-    ImGui::SetItemTooltip("Copy the whole example");
     ImGui::SameLine();
     ImGui::AlignTextToFramePadding();
     ImGui::TextDisabled("Ctrl+Enter runs the block under the cursor");

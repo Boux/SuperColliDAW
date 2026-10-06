@@ -33,6 +33,7 @@ add_library(supercollidaw_ui OBJECT
     ui/EditorView.cpp
     ui/EditorWindow.cpp
     ui/ExamplesPanel.cpp
+    ui/IconButton.cpp
     ui/PostWindow.cpp
     ui/PuglClipboard.cpp
     ui/PuglImGuiInput.cpp
@@ -42,6 +43,7 @@ add_library(supercollidaw_ui OBJECT
 )
 target_include_directories(supercollidaw_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} PRIVATE ${CMAKE_SOURCE_DIR}/third_party/ImGuiColorTextEdit/example)
 target_link_libraries(supercollidaw_ui PUBLIC ui_pugl ui_imgui ui_texteditor)
+embed_binary(supercollidaw_ui lucide_ttf ${CMAKE_SOURCE_DIR}/third_party/lucide/lucide.ttf)
 
 add_library(supercollidaw_clap MODULE
     plugin/entry.cpp

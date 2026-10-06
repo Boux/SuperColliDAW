@@ -10,6 +10,9 @@
 #include <algorithm>
 #include <utility>
 
+extern const unsigned char lucide_ttf[];
+extern const unsigned long lucide_ttf_size;
+
 namespace supercollidaw {
 
 namespace {
@@ -29,6 +32,17 @@ private:
 
 void addCodeFont(ImGuiIO& io) { io.Fonts->AddFontFromMemoryCompressedTTF(dejavu, dejavuSize, kFontSize); }
 
+void addIconFont(ImGuiIO& io) {
+    ImFontConfig config;
+    config.MergeMode = true;
+    config.FontDataOwnedByAtlas = false;
+    config.GlyphMinAdvanceX = kFontSize;
+    // Lucide icons fill the em box above the baseline; DejaVu Sans Mono's descent (483 of its 1901 + 483 units) moves them onto the text line.
+    config.GlyphOffset.y = kFontSize * 483.f / (1901.f + 483.f);
+    // ImGui takes the font data as void* but never writes to it.
+    io.Fonts->AddFontFromMemoryTTF(const_cast<unsigned char*>(lucide_ttf), static_cast<int>(lucide_ttf_size), kFontSize, &config);
+}
+
 }
 
 EditorWindow::EditorWindow(PuglNativeView parent, uint32_t width, uint32_t height, double scale, DrawContents drawContents):
@@ -41,6 +55,7 @@ EditorWindow::EditorWindow(PuglNativeView parent, uint32_t width, uint32_t heigh
     ImGui::GetIO().IniFilename = nullptr;
     ImGui::GetIO().BackendPlatformName = "pugl";
     addCodeFont(ImGui::GetIO());
+    addIconFont(ImGui::GetIO());
     mClipboard.install();
     setScale(scale);
 

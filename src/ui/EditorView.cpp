@@ -1,6 +1,8 @@
 #include "EditorView.h"
 
 #include "CodeRegion.h"
+#include "IconButton.h"
+#include "Icons.h"
 #include "SuperColliderLanguage.h"
 
 #include <imgui.h>
@@ -106,17 +108,14 @@ void EditorView::drawExamples(float width) {
 float EditorView::examplesWidth(float width) const { return std::clamp(mExamplesShare * width, kMinPaneWidth, std::max(kMinPaneWidth, width - kMinPaneWidth)); }
 
 void EditorView::drawToolbar() {
-    if (ImGui::Button("Run all"))
+    if (iconButton(kIconPlay, "Run all\nStop everything and run the whole code.\nCtrl+Enter evaluates the block or selection, Shift+Enter the line."))
         runAll();
-    ImGui::SetItemTooltip("Stop everything and run the whole code.\nCtrl+Enter evaluates the block or selection, Shift+Enter the line.");
     ImGui::SameLine();
-    if (ImGui::Button("Stop"))
+    if (iconButton(kIconSquare, "Stop all sound (Ctrl+.)"))
         mActions.stop();
-    ImGui::SetItemTooltip("Stop all sound (Ctrl+.)");
     ImGui::SameLine();
-    if (ImGui::Button("Reboot interpreter"))
+    if (iconButton(kIconRotateCcw, "Reboot interpreter (Ctrl+Shift+L)\nRestart sclang and the server, then run the whole code"))
         mActions.rebootInterpreter();
-    ImGui::SetItemTooltip("Restart sclang and the server, then run the whole code (Ctrl+Shift+L)");
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemSpacing.x * 4.f);
     drawFileButtons();
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemSpacing.x * 4.f);
@@ -126,29 +125,24 @@ void EditorView::drawToolbar() {
 }
 
 void EditorView::drawFileButtons() {
-    if (ImGui::Button("Open..."))
+    if (iconButton(kIconFolderOpen, "Open (Ctrl+O)\nLink this instance to a .scd file"))
         mActions.open();
-    ImGui::SetItemTooltip("Link this instance to a .scd file (Ctrl+O)");
     ImGui::SameLine();
-    if (ImGui::Button("Save"))
+    if (iconButton(kIconSave, "Save the linked file (Ctrl+S)"))
         mActions.save(mEditor.GetText());
-    ImGui::SetItemTooltip("Save the linked file (Ctrl+S)");
     ImGui::SameLine();
-    if (ImGui::Button("Save as..."))
+    if (iconButton(kIconSavePen, "Save as (Ctrl+Shift+S)\nSave to a new .scd file and link to it"))
         mActions.saveAs(mEditor.GetText());
-    ImGui::SetItemTooltip("Save to a new .scd file and link to it (Ctrl+Shift+S)");
     if (!mStatus.linked)
         return;
     ImGui::SameLine();
-    if (ImGui::Button("Unlink"))
+    if (iconButton(kIconUnlink, "Unlink\nKeep the code in the project and stop following the file"))
         mActions.unlink(mEditor.GetText());
-    ImGui::SetItemTooltip("Keep the code in the project and stop following the file");
 }
 
 void EditorView::drawExamplesButton() {
-    if (ImGui::Button(mShowExamples ? "Hide examples" : "Examples"))
+    if (iconButton(kIconBookOpen, mShowExamples ? "Hide examples (F1)" : "Examples (F1)\nExample code to run or copy, one per feature"))
         mShowExamples = !mShowExamples;
-    ImGui::SetItemTooltip("Example code to run or copy, one per feature (F1)");
 }
 
 void EditorView::drawStatus() {
