@@ -80,7 +80,7 @@ Plugin::Plugin(const clap_host* host):
     mClapPlugin.activate = [](const clap_plugin* plugin, double sampleRate, uint32_t, uint32_t maxFrames) {
         return from(plugin)->activate(sampleRate, maxFrames);
     };
-    mClapPlugin.deactivate = [](const clap_plugin* plugin) { from(plugin)->deactivate(); };
+    mClapPlugin.deactivate = [](const clap_plugin*) {};
     mClapPlugin.start_processing = [](const clap_plugin*) { return true; };
     mClapPlugin.stop_processing = [](const clap_plugin*) {};
     mClapPlugin.reset = [](const clap_plugin*) {};
@@ -119,6 +119,8 @@ bool Plugin::init() {
 void Plugin::destroy() {
     if (mCodePollTimer != CLAP_INVALID_ID)
         mHostTimer->unregister_timer(mHost, mCodePollTimer);
+    if (mEngine)
+        stopServer();
     delete this;
 }
 
@@ -139,13 +141,19 @@ void Plugin::stopSclang() {
     mSclang.reset();
 }
 
-// TODO: keep the World when the sample rate is unchanged; hosts restart processing on routing or latency changes, which wipes the running server.
+// The server outlives deactivate: hosts restart processing on routing or latency changes, and a new server would lose everything the code started.
 bool Plugin::activate(double sampleRate, uint32_t maxFrames) {
+    mSilence.assign(maxFrames, 0.f);
+    if (mEngine && (mServerRestartRequested || mEngine->sampleRate() != sampleRate))
+        stopServer();
+    return mEngine || startServer(sampleRate);
+}
+
+bool Plugin::startServer(double sampleRate) {
     auto engine = std::make_unique<Engine>(
         Engine::Config{ sampleRate, kNumChannels, kNumChannels, ugenPluginPath(pluginResourcesDir() / "plugins"), [this](const std::string& line) { post(line); } });
     if (!engine->isRunning())
         return false;
-    mSilence.assign(maxFrames, 0.f);
     mEngine = std::move(engine);
     mTransport = std::make_unique<TransportFollower>(sampleRate);
     mTransportBuses = std::make_unique<TransportBuses>(sampleRate, ParameterBank::kCount);
@@ -156,11 +164,12 @@ bool Plugin::activate(double sampleRate, uint32_t maxFrames) {
     return true;
 }
 
-void Plugin::deactivate() {
+void Plugin::stopServer() {
     mOscPort->attach(nullptr);
     mEngine.reset();
     mTransport.reset();
     mTransportBuses.reset();
+    mServerRestartRequested = false;
     mReleaseHeldNotes = true;
     if (mSclang)
         mSclang->serverStopped();
@@ -218,8 +227,10 @@ void Plugin::saveSettings(const EditorSettings& settings) {
 void Plugin::rebootInterpreter() {
     stopSclang();
     startSclang();
-    if (mEngine)
-        mHost->request_restart(mHost);
+    if (!mEngine)
+        return;
+    mServerRestartRequested = true;
+    mHost->request_restart(mHost);
 }
 
 void Plugin::run(const std::string& code) {

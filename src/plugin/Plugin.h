@@ -43,7 +43,8 @@ private:
     bool init();
     void destroy();
     bool activate(double sampleRate, uint32_t maxFrames);
-    void deactivate();
+    bool startServer(double sampleRate);
+    void stopServer();
     clap_process_status process(const clap_process* process);
     const void* extension(const char* id) const;
     void onTimer(clap_id timerId);
@@ -103,6 +104,7 @@ private:
     std::unique_ptr<TransportFollower> mTransport;
     std::unique_ptr<TransportBuses> mTransportBuses;
     HeldNotes mHeldNotes{};
+    bool mServerRestartRequested = false;
     bool mReleaseHeldNotes = false;
     std::vector<float> mSilence;
 };

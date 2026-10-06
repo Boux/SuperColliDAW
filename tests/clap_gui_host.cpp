@@ -32,6 +32,8 @@ std::set<clap_id> gTimers;
 std::set<int> gFds;
 int gFdCallbacks = 0;
 std::atomic<bool> gCallbackRequested = false;
+std::atomic<bool> gRestartRequested = false;
+int gRestarts = 0;
 
 const clap_host_posix_fd_support kHostFdSupport = {
     .register_fd = [](const clap_host*, int fd, clap_posix_fd_flags_t) { return gFds.insert(fd).second; },
@@ -60,7 +62,7 @@ const clap_host kHost = {
             return &kHostFdSupport;
         return std::string(id) == CLAP_EXT_TIMER_SUPPORT ? &kHostTimerSupport : nullptr;
     },
-    .request_restart = [](const clap_host*) {},
+    .request_restart = [](const clap_host*) { gRestartRequested = true; },
     .request_process = [](const clap_host*) {},
     .request_callback = [](const clap_host*) { gCallbackRequested = true; },
 };
@@ -110,6 +112,18 @@ std::thread startAudio(const clap_plugin* plugin, std::atomic<bool>& running, st
             std::this_thread::sleep_until(next);
         }
     });
+}
+
+void restart(const clap_plugin* plugin, std::thread& audio, std::atomic<bool>& running, std::atomic<float>& peak) {
+    running = false;
+    audio.join();
+    plugin->stop_processing(plugin);
+    plugin->deactivate(plugin);
+    plugin->activate(plugin, kSampleRate, 1, kBlockFrames);
+    plugin->start_processing(plugin);
+    running = true;
+    audio = startAudio(plugin, running, peak);
+    ++gRestarts;
 }
 
 void writePpm(Display* display, Window window, uint32_t width, uint32_t height, const char* path) {
@@ -188,6 +202,8 @@ int main(int argc, char** argv) {
             timer->on_timer(plugin, id);
         if (gCallbackRequested.exchange(false))
             plugin->on_main_thread(plugin);
+        if (gRestartRequested.exchange(false))
+            restart(plugin, audio, audioRunning, peak);
         for (int fd : std::set<int>(gFds)) {
             pollfd request = { .fd = fd, .events = POLLIN, .revents = 0 };
             if (poll(&request, 1, 0) > 0 && (request.revents & POLLIN)) {
@@ -213,7 +229,7 @@ int main(int argc, char** argv) {
     entry->deinit();
     XDestroyWindow(display, parent);
     XCloseDisplay(display);
-    std::printf("gui ran for %.1f s at %ux%u, output peak %.3f, %d fd callbacks, screenshot in %s\n", seconds, width, height, peak.load(),
-        gFdCallbacks, argv[3]);
+    std::printf("gui ran for %.1f s at %ux%u, output peak %.3f, %d fd callbacks, %d restarts, screenshot in %s\n", seconds, width, height,
+        peak.load(), gFdCallbacks, gRestarts, argv[3]);
     return 0;
 }

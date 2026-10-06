@@ -49,6 +49,7 @@ public:
     Engine& operator=(const Engine&) = delete;
 
     bool isRunning() const { return mWorld != nullptr; }
+    double sampleRate() const { return mSampleRate; }
 
     void process(const float* const* inputs, float* const* outputs, uint32_t numFrames, std::initializer_list<ControlSource*> controls, MidiSink& midi);
     bool sendPacket(char* data, int size, ReplyFunc replyFunc, void* replyContext);
@@ -65,6 +66,7 @@ private:
     void writePendingMidi(uint32_t numFrames, MidiSink& midi);
     void drainOutputInNonRealtime();
 
+    double mSampleRate;
     ServerOutput mOutput;
     World* mWorld = nullptr;
     SC_PluginDriver* mDriver = nullptr;

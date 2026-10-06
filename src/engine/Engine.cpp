@@ -29,6 +29,7 @@ std::vector<float*> channelPointers(std::vector<float>& stage, uint32_t numChann
 void Engine::unloadPlugins() { World_UnloadPlugins(); }
 
 Engine::Engine(const Config& config):
+    mSampleRate(config.sampleRate),
     mOutput(config.onPost),
     mNumInputs(config.numInputs),
     mNumOutputs(config.numOutputs),

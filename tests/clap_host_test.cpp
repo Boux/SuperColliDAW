@@ -500,6 +500,25 @@ void testReactivationKeepsServerNotifications(const clap_plugin_factory* factory
     check(std::fabs(after - 660.0) <= 4.0, "server notifications still reach sclang after the host reactivates the plugin");
 }
 
+void testReactivationKeepsTheServer(const clap_plugin_factory* factory) {
+    const std::string code = "~runs = (~runs ? 0) + 1;\n{ SinOsc.ar(220 * ~runs, 0, 0.1) }.play;\nMIDIOut(0).noteOn(2, 65, 100);\n";
+    Instance instance(factory, 48000.0);
+    instance.waitForSound();
+    instance.loadState(supercollidaw::encodeState({ code, "", {} }));
+    instance.waitForFrequency(220.0);
+    instance.waitForMidiOut(0x92, 65);
+    instance.takeMidiOut();
+    check(instance.reactivate(48000.0), "the plugin reactivates at the same sample rate");
+    const double right = estimateFrequency(instance.runSilence(0.5, kMaxFrames), 48000.0);
+    instance.runRealtime(std::vector<float>(2 * 48000, 0.f));
+    const double later = estimateFrequency(instance.runSilence(0.5, kMaxFrames), 48000.0);
+    std::printf("  right after reactivating: %.2f Hz, 2 s later: %.2f Hz\n", right, later);
+    check(std::fabs(right - 220.0) <= 4.0, "the running synth plays on through a reactivation at the same sample rate");
+    check(std::fabs(later - 220.0) <= 4.0, "a reactivation at the same sample rate does not run the code again");
+    const std::vector<OutputMidi> midi = instance.takeMidiOut();
+    check(std::ranges::none_of(midi, [](const OutputMidi& m) { return m.status == 0x82 && m.data1 == 65; }), "notes from a kept server stay on");
+}
+
 void testStuckSclangDoesNotBlockTheHost(const clap_plugin_factory* factory) {
     Instance instance(factory, 48000.0);
     instance.waitForSound();
@@ -794,12 +813,12 @@ void testReactivationReleasesHeldMidiNotes(const clap_plugin_factory* factory) {
     instance.loadState(supercollidaw::encodeState({ "MIDIOut(0).noteOn(2, 65, 100);\n", "", {} }));
     instance.waitForMidiOut(0x92, 65);
     instance.takeMidiOut();
-    instance.reactivate(48000.0);
+    instance.reactivate(44100.0);
     const uint64_t start = instance.framesProcessed();
     instance.runSilence(0.001, kMaxFrames);
     const std::vector<OutputMidi> midi = instance.takeMidiOut();
     const bool released = !midi.empty() && midi.front().status == 0x82 && midi.front().data1 == 65 && midi.front().frame == start;
-    check(released, "the first process after a reactivation releases notes the old server left on");
+    check(released, "the first process after a new server releases notes the old server left on");
 }
 
 size_t nonFiniteSamples(const std::vector<float>& signal) { return std::ranges::count_if(signal, [](float sample) { return !std::isfinite(sample); }); }
@@ -1046,6 +1065,7 @@ int main(int argc, char** argv) {
     testStateRestoresCode(factory);
     testFileIsNeverLoadedOnItsOwn(factory);
     testReactivationKeepsServerNotifications(factory);
+    testReactivationKeepsTheServer(factory);
     testUnprocessedInstanceRecovers(factory);
     testStuckSclangDoesNotBlockTheHost(factory);
     testTrackMidiReachesMIDIdef(factory);
