@@ -29,6 +29,7 @@ public:
     void onFd(int fd);
     void setCode(const std::string& code) { mView.setCode(code); }
     void setStatus(EditorStatus status) { mView.setStatus(std::move(status)); }
+    void setSettings(EditorSettings settings) { mView.setSettings(std::move(settings)); }
     void showCompletion(const Completion& completion) { mView.showCompletion(completion); }
     void showSignatureHelp(const SignatureHelp& help) { mView.showSignatureHelp(help); }
 

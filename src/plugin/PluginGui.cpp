@@ -122,6 +122,8 @@ bool PluginGui::setParent(const clap_window* window) {
     // CLAP hosts set the scale before embedding; one that does not leaves it to the plugin, so follow the system's.
     if (!mHostScale)
         mWindow->setScale(mWindow->systemScale());
+    mWindow->setSettings(mView.settings());
+    mView.setFixedFonts(mWindow->fixedFonts());
     registerEventFd();
     return true;
 }
@@ -162,6 +164,7 @@ bool PluginGui::hide() {
 bool PluginGui::onTimer(clap_id timerId) {
     if (timerId != mFrameTimer || !mWindow)
         return false;
+    mWindow->setSettings(mView.settings());
     mWindow->idle();
     return true;
 }

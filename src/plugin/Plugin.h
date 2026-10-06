@@ -12,6 +12,7 @@
 #include "midi/MidiOutput.h"
 #include "params/ParameterBank.h"
 #include "params/ParameterWatcher.h"
+#include "settings/SettingsFile.h"
 #include "transport/TransportBuses.h"
 #include "transport/TransportFollower.h"
 
@@ -50,6 +51,8 @@ private:
     void applyParameterEvents();
     void showLanguageReplies();
     void pollSclang();
+    void pollSettings();
+    void saveSettings(const EditorSettings& settings);
 
     void startSclang();
     void stopSclang();
@@ -88,6 +91,7 @@ private:
     PostLog mPostLog;
     ParameterBank mParameters;
     ParameterWatcher mWatcher;
+    SettingsFile mSettingsFile;
     ReplyInbox<Completion> mCompletions;
     ReplyInbox<SignatureHelp> mSignatures;
     std::unique_ptr<OscPort> mOscPort;

@@ -33,17 +33,25 @@ add_library(supercollidaw_ui OBJECT
     ui/EditorView.cpp
     ui/EditorWindow.cpp
     ui/ExamplesPanel.cpp
-    ui/IconButton.cpp
+    ui/FontMetrics.cpp
+    ui/Fonts.cpp
+    ui/IconButtons.cpp
     ui/PostWindow.cpp
     ui/PuglClipboard.cpp
     ui/PuglImGuiInput.cpp
+    ui/SettingsForm.cpp
     ui/SignatureHint.cpp
     ui/SuperColliderLanguage.cpp
-    ${CMAKE_SOURCE_DIR}/third_party/ImGuiColorTextEdit/example/dejavu.cpp
 )
-target_include_directories(supercollidaw_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} PRIVATE ${CMAKE_SOURCE_DIR}/third_party/ImGuiColorTextEdit/example)
+target_include_directories(supercollidaw_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(supercollidaw_ui PUBLIC ui_pugl ui_imgui ui_texteditor)
-embed_binary(supercollidaw_ui lucide_ttf ${CMAKE_SOURCE_DIR}/third_party/lucide/lucide.ttf)
+set(FONTS_DIR ${CMAKE_SOURCE_DIR}/third_party/fonts)
+embed_binary(supercollidaw_ui cozette_ttf ${FONTS_DIR}/cozette/CozetteVector.ttf)
+embed_binary(supercollidaw_ui dejavu_sans_mono_ttf ${FONTS_DIR}/dejavu-sans-mono/DejaVuSansMono.ttf)
+embed_binary(supercollidaw_ui ibm_plex_mono_ttf ${FONTS_DIR}/ibm-plex-mono/IBMPlexMono-Regular.ttf)
+embed_binary(supercollidaw_ui jetbrains_mono_ttf ${FONTS_DIR}/jetbrains-mono/JetBrainsMono-Regular.ttf)
+embed_binary(supercollidaw_ui lucide_ttf ${FONTS_DIR}/lucide/lucide.ttf)
+embed_binary(supercollidaw_ui source_code_pro_ttf ${FONTS_DIR}/source-code-pro/SourceCodePro-Regular.ttf)
 
 add_library(supercollidaw_clap MODULE
     plugin/entry.cpp
@@ -64,6 +72,7 @@ add_library(supercollidaw_clap MODULE
     plugin/params/ParameterExtension.cpp
     plugin/params/ParameterSpec.cpp
     plugin/params/ParameterWatcher.cpp
+    plugin/settings/SettingsFile.cpp
     plugin/state/ClapStreams.cpp
     plugin/state/PluginState.cpp
     plugin/transport/TransportBuses.cpp

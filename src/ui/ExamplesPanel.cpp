@@ -1,12 +1,11 @@
 #include "ExamplesPanel.h"
 
-#include "IconButton.h"
 #include "Icons.h"
 #include "SuperColliderLanguage.h"
 
 namespace supercollidaw {
 
-ExamplesPanel::ExamplesPanel(std::vector<Example> examples): mExamples(std::move(examples)) {
+ExamplesPanel::ExamplesPanel(std::vector<Example> examples, const IconButtons& icons): mExamples(std::move(examples)), mIcons(icons) {
     mViewer.SetLanguage(superColliderLanguage());
     mViewer.SetTabSize(4);
     mViewer.SetReadOnlyEnabled(true);
@@ -26,27 +25,27 @@ void ExamplesPanel::draw(const ImVec2& size) {
 void ExamplesPanel::drawContents() {
     if (mExamples.empty())
         return ImGui::TextDisabled("No examples were found next to the plugin.");
-    drawList();
+    drawCombo();
     drawCopyButton();
     mViewer.Render("example");
 }
 
-void ExamplesPanel::drawList() {
-    const float height = ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(mExamples.size()) + ImGui::GetStyle().FramePadding.y * 2.f;
-    if (!ImGui::BeginListBox("##examples", ImVec2(-FLT_MIN, height)))
+void ExamplesPanel::drawCombo() {
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (!ImGui::BeginCombo("##examples", mExamples[mSelected].title.c_str(), ImGuiComboFlags_HeightLarge))
         return;
     for (size_t index = 0; index < mExamples.size(); ++index)
-        drawListItem(index);
-    ImGui::EndListBox();
+        drawComboItem(index);
+    ImGui::EndCombo();
 }
 
-void ExamplesPanel::drawListItem(size_t index) {
+void ExamplesPanel::drawComboItem(size_t index) {
     if (ImGui::Selectable(mExamples[index].title.c_str(), index == mSelected))
         select(index);
 }
 
 void ExamplesPanel::drawCopyButton() {
-    if (iconButton(kIconCopy, "Copy the whole example"))
+    if (mIcons.button(kIconCopy, "Copy the whole example"))
         ImGui::SetClipboardText(mExamples[mSelected].code.c_str());
     ImGui::SameLine();
     ImGui::AlignTextToFramePadding();

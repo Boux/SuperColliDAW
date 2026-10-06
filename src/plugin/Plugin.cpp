@@ -70,6 +70,7 @@ const clap_plugin_render Plugin::kRender = {
 Plugin::Plugin(const clap_host* host):
     mHost(host),
     mWatcher([host] { host->request_callback(host); }),
+    mSettingsFile(userDataDir() / "settings.txt"),
     mCompletions(kCompletionsAddress, readCompletion, [host] { host->request_callback(host); }),
     mSignatures(kSignaturesAddress, readSignatureHelp, [host] { host->request_callback(host); }) {
     mClapPlugin.desc = &kDescriptor;
@@ -110,6 +111,7 @@ bool Plugin::init() {
     mGui = std::make_unique<PluginGui>(mHost, mHostTimer, mHostFd, editorActions(), mPostLog, loadExamples(pluginResourcesDir() / "examples"));
     mGui->setCode(mCode->code());
     mGui->setStatus(mCode->status());
+    mGui->setSettings(mSettingsFile.load());
     startSclang();
     return true;
 }
@@ -172,6 +174,7 @@ void Plugin::onTimer(clap_id timerId) {
     mCode->poll();
     applyParameterEvents();
     pollSclang();
+    pollSettings();
 }
 
 void Plugin::onMainThread() {
@@ -199,6 +202,17 @@ void Plugin::pollSclang() {
         return;
     post("sclang exited with code " + std::to_string(*exitStatus) + ". Reboot the interpreter to run code again.");
     stopSclang();
+}
+
+// Other instances, which hosts like Bitwig run in their own processes, see a change through the file.
+void Plugin::pollSettings() {
+    if (const std::optional<EditorSettings> settings = mSettingsFile.reloadIfChanged())
+        mGui->setSettings(*settings);
+}
+
+void Plugin::saveSettings(const EditorSettings& settings) {
+    if (!mSettingsFile.save(settings))
+        post("SuperColliDAW: the settings could not be saved to " + mSettingsFile.path().string() + ".");
 }
 
 void Plugin::rebootInterpreter() {
@@ -263,6 +277,7 @@ EditorActions Plugin::editorActions() {
         .save = [this](const std::string& code) { mCode->save(code); },
         .saveAs = [this](const std::string& code) { mCode->saveAs(code); },
         .unlink = [this](const std::string& code) { mCode->unlink(code); },
+        .settingsChanged = [this](const EditorSettings& settings) { saveSettings(settings); },
     };
 }
 

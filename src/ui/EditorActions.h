@@ -1,5 +1,7 @@
 #pragma once
 
+#include "EditorSettings.h"
+
 #include <functional>
 #include <string>
 
@@ -23,6 +25,7 @@ struct EditorActions {
     std::function<void(const std::string& code)> save;
     std::function<void(const std::string& code)> saveAs;
     std::function<void(const std::string& code)> unlink;
+    std::function<void(const EditorSettings& settings)> settingsChanged;
 };
 
 }

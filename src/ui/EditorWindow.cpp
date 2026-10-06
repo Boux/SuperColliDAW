@@ -1,17 +1,19 @@
 #include "EditorWindow.h"
 
+#include "FontMetrics.h"
+#include "Fonts.h"
+#include "IconButtons.h"
 #include "PuglImGuiInput.h"
 
-#include <dejavu.h>
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
 #include <pugl/gl.h>
 
 #include <algorithm>
+#include <cmath>
+#include <optional>
+#include <string_view>
 #include <utility>
-
-extern const unsigned char lucide_ttf[];
-extern const unsigned long lucide_ttf_size;
 
 namespace supercollidaw {
 
@@ -19,7 +21,8 @@ namespace {
 
 constexpr char kGlslVersion[] = "#version 330 core";
 constexpr double kMinFrameTime = 1.0 / 1000.0;
-constexpr float kFontSize = 15.f;
+// Every outline font's em square gets this height at 100%, so switching fonts keeps the letters the same size; DejaVu Sans Mono comes out at 15 px.
+constexpr float kEmSize = 13.f;
 
 class ScopedImGuiContext {
 public:
@@ -30,17 +33,37 @@ private:
     ImGuiContext* mPrevious;
 };
 
-void addCodeFont(ImGuiIO& io) { io.Fonts->AddFontFromMemoryCompressedTTF(dejavu, dejavuSize, kFontSize); }
+bool isPixelFont(const BundledFont& font) { return font.pixelHeight > 0.f; }
 
-void addIconFont(ImGuiIO& io) {
+// ImGui sizes a font by its ascent plus descent, which takes a different share of the em square in every font.
+float baseSize(const BundledFont& font, const FontMetrics& metrics) {
+    if (isPixelFont(font))
+        return font.pixelHeight;
+    return kEmSize * static_cast<float>(metrics.ascent - metrics.descent) / static_cast<float>(metrics.unitsPerEm);
+}
+
+// A pixel font is only sharp at whole multiples of its pixel height, so its size snaps after the DPI scale.
+float textSize(const BundledFont& font, float baseSize, int sizePercent, double dpiScale) {
+    const double ratio = sizePercent / 100.0;
+    if (!isPixelFont(font))
+        return static_cast<float>(baseSize * ratio);
+    return static_cast<float>(baseSize * std::max(1.0, std::round(ratio * dpiScale)) / dpiScale);
+}
+
+// ImGui takes font data as void* but never writes to it.
+void* fontData(std::span<const unsigned char> data) { return const_cast<unsigned char*>(data.data()); }
+
+ImFont* addTextFont(ImGuiIO& io, const BundledFont& font, float size) {
     ImFontConfig config;
-    config.MergeMode = true;
     config.FontDataOwnedByAtlas = false;
-    config.GlyphMinAdvanceX = kFontSize;
-    // Lucide icons fill the em box above the baseline; DejaVu Sans Mono's descent (483 of its 1901 + 483 units) moves them onto the text line.
-    config.GlyphOffset.y = kFontSize * 483.f / (1901.f + 483.f);
-    // ImGui takes the font data as void* but never writes to it.
-    io.Fonts->AddFontFromMemoryTTF(const_cast<unsigned char*>(lucide_ttf), static_cast<int>(lucide_ttf_size), kFontSize, &config);
+    config.PixelSnapH = isPixelFont(font);
+    return io.Fonts->AddFontFromMemoryTTF(fontData(font.data), static_cast<int>(font.data.size()), size, &config);
+}
+
+ImFont* addIconFont(ImGuiIO& io) {
+    ImFontConfig config;
+    config.FontDataOwnedByAtlas = false;
+    return io.Fonts->AddFontFromMemoryTTF(fontData(iconFontData()), static_cast<int>(iconFontData().size()), kIconSize, &config);
 }
 
 }
@@ -50,14 +73,13 @@ EditorWindow::EditorWindow(PuglNativeView parent, uint32_t width, uint32_t heigh
     mWorld(puglNewWorld(PUGL_MODULE, 0)),
     mView(puglNewView(mWorld)),
     mClipboard(mView),
-    mImGui(ImGui::CreateContext()) {
+    mImGui(ImGui::CreateContext()),
+    mScale(scale) {
     ScopedImGuiContext context(mImGui);
     ImGui::GetIO().IniFilename = nullptr;
     ImGui::GetIO().BackendPlatformName = "pugl";
-    addCodeFont(ImGui::GetIO());
-    addIconFont(ImGui::GetIO());
+    addFonts(ImGui::GetIO());
     mClipboard.install();
-    setScale(scale);
 
     puglSetWorldString(mWorld, PUGL_CLASS_NAME, "SuperColliDAW");
     useSystemKeyRepeat(ImGui::GetIO());
@@ -85,13 +107,15 @@ EditorWindow::~EditorWindow() {
 void EditorWindow::setSize(uint32_t width, uint32_t height) { puglSetSizeHint(mView, PUGL_CURRENT_SIZE, width, height); }
 
 void EditorWindow::setScale(double scale) {
-    ScopedImGuiContext context(mImGui);
-    ImGuiStyle style;
-    ImGui::StyleColorsDark(&style);
-    style.FontSizeBase = kFontSize;
-    style.ScaleAllSizes(static_cast<float>(scale));
-    style.FontScaleDpi = static_cast<float>(scale);
-    ImGui::GetStyle() = style;
+    mScale = scale;
+    mStyleOutdated = true;
+}
+
+void EditorWindow::setSettings(const EditorSettings& settings) {
+    if (settings == mSettings)
+        return;
+    mSettings = settings;
+    mStyleOutdated = true;
 }
 
 double EditorWindow::systemScale() const { return puglGetScaleFactor(mView); }
@@ -106,6 +130,39 @@ void EditorWindow::idle() {
 }
 
 void EditorWindow::processEvents() { puglUpdate(mWorld, 0.0); }
+
+void EditorWindow::addFonts(ImGuiIO& io) {
+    for (const BundledFont& font : bundledFonts()) {
+        const std::optional<FontMetrics> metrics = readFontMetrics(font.data);
+        if (!metrics)
+            continue;
+        const float size = baseSize(font, *metrics);
+        mFonts.push_back({ &font, addTextFont(io, font, size), size });
+    }
+    mIconFont = addIconFont(io);
+}
+
+FixedFonts EditorWindow::fixedFonts() const {
+    const LoadedFont& text = loadedFont(kDefaultFont);
+    return { mIconFont, text.font, text.baseSize };
+}
+
+const EditorWindow::LoadedFont& EditorWindow::loadedFont(std::string_view name) const {
+    const auto found = std::ranges::find(mFonts, name, [](const LoadedFont& font) { return std::string_view(font.source->name); });
+    return found != mFonts.end() ? *found : mFonts.front();
+}
+
+void EditorWindow::applyStyle() {
+    const LoadedFont& font = loadedFont(mSettings.font);
+    ImGuiStyle style;
+    ImGui::StyleColorsDark(&style);
+    style.ScaleAllSizes(static_cast<float>(mScale));
+    // The size setting goes into FontSizeBase, because ImGui applies FontScaleMain to the icon font too.
+    style.FontSizeBase = textSize(*font.source, font.baseSize, mSettings.fontSizePercent, mScale);
+    style.FontScaleDpi = static_cast<float>(mScale);
+    ImGui::GetStyle() = style;
+    ImGui::GetIO().FontDefault = font.font;
+}
 
 PuglStatus EditorWindow::onEvent(PuglView* view, const PuglEvent* event) {
     return static_cast<EditorWindow*>(puglGetHandle(view))->handle(*event);
@@ -144,6 +201,8 @@ PuglStatus EditorWindow::stopRenderer() {
 }
 
 PuglStatus EditorWindow::drawFrame() {
+    if (std::exchange(mStyleOutdated, false))
+        applyStyle();
     const PuglArea size = puglGetSizeHint(mView, PUGL_CURRENT_SIZE);
     const double now = puglGetTime(mWorld);
     ImGuiIO& io = ImGui::GetIO();

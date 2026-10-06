@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Example.h"
+#include "IconButtons.h"
 
 #include <TextEditor.h>
 #include <imgui.h>
@@ -11,7 +12,7 @@ namespace supercollidaw {
 
 class ExamplesPanel {
 public:
-    explicit ExamplesPanel(std::vector<Example> examples);
+    ExamplesPanel(std::vector<Example> examples, const IconButtons& icons);
 
     void draw(const ImVec2& size);
     bool focused() const { return mFocused; }
@@ -19,12 +20,13 @@ public:
 
 private:
     void drawContents();
-    void drawList();
-    void drawListItem(size_t index);
+    void drawCombo();
+    void drawComboItem(size_t index);
     void drawCopyButton();
     void select(size_t index);
 
     std::vector<Example> mExamples;
+    const IconButtons& mIcons;
     size_t mSelected = 0;
     TextEditor mViewer;
     bool mFocused = false;

@@ -5,6 +5,8 @@
 #include "CodeFlash.h"
 #include "EditorActions.h"
 #include "ExamplesPanel.h"
+#include "FixedFonts.h"
+#include "IconButtons.h"
 #include "PostWindow.h"
 #include "SignatureHint.h"
 
@@ -19,6 +21,9 @@ public:
 
     void setCode(const std::string& code);
     void setStatus(EditorStatus status) { mStatus = std::move(status); }
+    void setSettings(EditorSettings settings) { mSettings = std::move(settings); }
+    const EditorSettings& settings() const { return mSettings; }
+    void setFixedFonts(const FixedFonts& fonts);
     void showCompletion(const Completion& completion) { mCompletion.show(completion); }
     void showSignatureHelp(const SignatureHelp& help) { mSignatureHint.show(help); }
     void draw();
@@ -27,6 +32,8 @@ private:
     void drawToolbar();
     void drawFileButtons();
     void drawExamplesButton();
+    void drawSettingsButton();
+    void drawSettingsPopup(float textSize);
     void drawStatus();
     void drawCodeAndPost();
     void drawExamples(float width);
@@ -37,6 +44,9 @@ private:
     TextEditor& focusedEditor();
 
     EditorActions mActions;
+    FixedFonts mFixedFonts;
+    EditorSettings mSettings;
+    IconButtons mIcons;
     EditorStatus mStatus;
     CodeEditor mEditor;
     CodeCompletion mCompletion;

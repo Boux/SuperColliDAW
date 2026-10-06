@@ -1,8 +1,8 @@
 #include "EditorView.h"
 
 #include "CodeRegion.h"
-#include "IconButton.h"
 #include "Icons.h"
+#include "SettingsForm.h"
 #include "SuperColliderLanguage.h"
 
 #include <imgui.h>
@@ -45,6 +45,9 @@ LineRange linesIn(const TextEditor::DocSelection& section) {
     return { section.start.line, section.end.line - (endsAtLineStart ? 1 : 0) };
 }
 
+// Moves the next items to the right edge, unless the line is already too full for them.
+void alignRight(float width) { ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.f, ImGui::GetContentRegionAvail().x - width)); }
+
 ImVec2 splitterDrag(const char* id, const ImVec2& size, ImGuiMouseCursor cursor) {
     ImGui::InvisibleButton(id, size);
     if (ImGui::IsItemHovered() || ImGui::IsItemActive())
@@ -56,10 +59,11 @@ ImVec2 splitterDrag(const char* id, const ImVec2& size, ImGuiMouseCursor cursor)
 
 EditorView::EditorView(EditorActions actions, const PostLog& postLog, std::vector<Example> examples):
     mActions(std::move(actions)),
+    mIcons(mSettings),
     mCompletion(mEditor, mActions.complete),
     mSignatureHint(mEditor, mActions.lookUpSignatures),
     mPostWindow(postLog),
-    mExamples(std::move(examples)),
+    mExamples(std::move(examples), mIcons),
     mPostHeight(kInitialPostHeight),
     mExamplesShare(kInitialExamplesShare) {
     mEditor.SetLanguage(superColliderLanguage());
@@ -70,6 +74,11 @@ EditorView::EditorView(EditorActions actions, const PostLog& postLog, std::vecto
 }
 
 void EditorView::setCode(const std::string& code) { mEditor.SetText(code); }
+
+void EditorView::setFixedFonts(const FixedFonts& fonts) {
+    mFixedFonts = fonts;
+    mIcons.setFont(fonts.icons);
+}
 
 void EditorView::draw() {
     ImGui::SetNextWindowPos(ImVec2(0.f, 0.f));
@@ -108,41 +117,62 @@ void EditorView::drawExamples(float width) {
 float EditorView::examplesWidth(float width) const { return std::clamp(mExamplesShare * width, kMinPaneWidth, std::max(kMinPaneWidth, width - kMinPaneWidth)); }
 
 void EditorView::drawToolbar() {
-    if (iconButton(kIconPlay, "Run all\nStop everything and run the whole code.\nCtrl+Enter evaluates the block or selection, Shift+Enter the line."))
+    if (mIcons.button(kIconPlay, "Run all\nStop everything and run the whole code.\nCtrl+Enter evaluates the block or selection, Shift+Enter the line."))
         runAll();
     ImGui::SameLine();
-    if (iconButton(kIconSquare, "Stop all sound (Ctrl+.)"))
+    if (mIcons.button(kIconSquare, "Stop all sound (Ctrl+.)"))
         mActions.stop();
     ImGui::SameLine();
-    if (iconButton(kIconRotateCcw, "Reboot interpreter (Ctrl+Shift+L)\nRestart sclang and the server, then run the whole code"))
+    if (mIcons.button(kIconRotateCcw, "Reboot interpreter (Ctrl+Shift+L)\nRestart sclang and the server, then run the whole code"))
         mActions.rebootInterpreter();
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemSpacing.x * 4.f);
     drawFileButtons();
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemSpacing.x * 4.f);
-    drawExamplesButton();
-    ImGui::SameLine(0.f, ImGui::GetStyle().ItemSpacing.x * 4.f);
     drawStatus();
+    ImGui::SameLine();
+    alignRight(mIcons.width() * 2.f + ImGui::GetStyle().ItemSpacing.x);
+    drawExamplesButton();
+    ImGui::SameLine();
+    drawSettingsButton();
 }
 
 void EditorView::drawFileButtons() {
-    if (iconButton(kIconFolderOpen, "Open (Ctrl+O)\nLink this instance to a .scd file"))
+    if (mIcons.button(kIconFolderOpen, "Open (Ctrl+O)\nLink this instance to a .scd file"))
         mActions.open();
     ImGui::SameLine();
-    if (iconButton(kIconSave, "Save the linked file (Ctrl+S)"))
+    if (mIcons.button(kIconSave, "Save the linked file (Ctrl+S)"))
         mActions.save(mEditor.GetText());
     ImGui::SameLine();
-    if (iconButton(kIconSavePen, "Save as (Ctrl+Shift+S)\nSave to a new .scd file and link to it"))
+    if (mIcons.button(kIconSavePen, "Save as (Ctrl+Shift+S)\nSave to a new .scd file and link to it"))
         mActions.saveAs(mEditor.GetText());
     if (!mStatus.linked)
         return;
     ImGui::SameLine();
-    if (iconButton(kIconUnlink, "Unlink\nKeep the code in the project and stop following the file"))
+    if (mIcons.button(kIconUnlink, "Unlink\nKeep the code in the project and stop following the file"))
         mActions.unlink(mEditor.GetText());
 }
 
 void EditorView::drawExamplesButton() {
-    if (iconButton(kIconBookOpen, mShowExamples ? "Hide examples (F1)" : "Examples (F1)\nExample code to run or copy, one per feature"))
+    if (mIcons.button(kIconBookOpen, mShowExamples ? "Hide examples (F1)" : "Examples (F1)\nExample code to run or copy, one per feature"))
         mShowExamples = !mShowExamples;
+}
+
+void EditorView::drawSettingsButton() {
+    if (mIcons.button(kIconSettings, "Settings"))
+        ImGui::OpenPopup("settings");
+    const float textSize = ImGui::GetFontSize();
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y), ImGuiCond_Always, ImVec2(1.f, 0.f));
+    ImGui::PushFont(mFixedFonts.text, mFixedFonts.textSize);
+    drawSettingsPopup(textSize);
+    ImGui::PopFont();
+}
+
+void EditorView::drawSettingsPopup(float textSize) {
+    if (!ImGui::BeginPopup("settings"))
+        return;
+    if (drawSettingsForm(mSettings, textSize))
+        mActions.settingsChanged(mSettings);
+    ImGui::EndPopup();
 }
 
 void EditorView::drawStatus() {
