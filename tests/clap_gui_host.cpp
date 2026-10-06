@@ -1,3 +1,6 @@
+#include "TestStreams.h"
+#include "plugin/state/PluginState.h"
+
 #include <clap/clap.h>
 
 #include <X11/Xlib.h>
@@ -13,6 +16,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <set>
+#include <sstream>
 #include <string>
 #include <thread>
 
@@ -124,9 +128,19 @@ void writePpm(Display* display, Window window, uint32_t width, uint32_t height, 
 
 }
 
+// Loads a project state that points at the file, the way a DAW reopens a project.
+void openFile(const clap_plugin* plugin, const char* path) {
+    std::ostringstream code;
+    code << std::ifstream(path).rdbuf();
+    const std::string bytes = supercollidaw::encodeState({ code.str(), path, {} });
+    ReadCursor cursor{ bytes };
+    auto* state = static_cast<const clap_plugin_state*>(plugin->get_extension(plugin, CLAP_EXT_STATE));
+    state->load(plugin, readingStream(cursor));
+}
+
 int main(int argc, char** argv) {
     if (argc < 4) {
-        std::fprintf(stderr, "usage: %s <plugin.clap> <seconds> <screenshot.ppm> [scale]\n", argv[0]);
+        std::fprintf(stderr, "usage: %s <plugin.clap> <seconds> <screenshot.ppm> [scale [file.scd]]\n", argv[0]);
         return 2;
     }
     const double seconds = std::atof(argv[2]);
@@ -136,6 +150,8 @@ int main(int argc, char** argv) {
     auto* factory = static_cast<const clap_plugin_factory*>(entry->get_factory(CLAP_PLUGIN_FACTORY_ID));
     const clap_plugin* plugin = factory->create_plugin(factory, &kHost, factory->get_plugin_descriptor(factory, 0)->id);
     plugin->init(plugin);
+    if (argc > 5)
+        openFile(plugin, argv[5]);
     plugin->activate(plugin, kSampleRate, 1, kBlockFrames);
     plugin->start_processing(plugin);
     std::atomic<bool> audioRunning = true;

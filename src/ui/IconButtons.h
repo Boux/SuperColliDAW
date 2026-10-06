@@ -2,7 +2,7 @@
 
 #include "EditorSettings.h"
 
-struct ImFont;
+#include <imgui.h>
 
 namespace supercollidaw {
 
@@ -15,10 +15,10 @@ public:
 
     void setFont(ImFont* font) { mFont = font; }
     bool button(const char* icon, const char* tooltip) const;
-    float width() const;
+    ImVec2 frameSize() const;
 
 private:
-    float size() const { return kIconSize * static_cast<float>(mSettings.fontSizePercent) / 100.f; }
+    float iconSize() const { return kIconSize * static_cast<float>(mSettings.fontSizePercent) / 100.f; }
 
     const EditorSettings& mSettings;
     ImFont* mFont = nullptr;

@@ -8,7 +8,7 @@ namespace supercollidaw {
 
 namespace {
 
-ImVec2 frameSize() {
+ImVec2 currentFrameSize() {
     const float size = ImGui::GetFontSize();
     const ImVec2 padding = ImGui::GetStyle().FramePadding;
     return ImVec2(size + padding.x * 2.f, size + padding.y * 2.f);
@@ -25,9 +25,9 @@ void drawIcon(const char* icon, const ImVec2& min, const ImVec2& max) {
 }
 
 bool IconButtons::button(const char* icon, const char* tooltip) const {
-    ImGui::PushFont(mFont, size());
+    ImGui::PushFont(mFont, iconSize());
     ImGui::PushID(icon);
-    const bool clicked = ImGui::Button("##icon", frameSize());
+    const bool clicked = ImGui::Button("##icon", currentFrameSize());
     ImGui::PopID();
     drawIcon(icon, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     ImGui::PopFont();
@@ -35,11 +35,11 @@ bool IconButtons::button(const char* icon, const char* tooltip) const {
     return clicked;
 }
 
-float IconButtons::width() const {
-    ImGui::PushFont(mFont, size());
-    const float width = frameSize().x;
+ImVec2 IconButtons::frameSize() const {
+    ImGui::PushFont(mFont, iconSize());
+    const ImVec2 size = currentFrameSize();
     ImGui::PopFont();
-    return width;
+    return size;
 }
 
 }

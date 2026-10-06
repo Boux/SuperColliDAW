@@ -8,6 +8,8 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <cmath>
+#include <filesystem>
 #include <limits>
 #include <vector>
 
@@ -132,7 +134,7 @@ void EditorView::drawToolbar() {
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemSpacing.x * 4.f);
     drawStatus();
     ImGui::SameLine();
-    alignRight(mIcons.width() * 2.f + ImGui::GetStyle().ItemSpacing.x);
+    alignRight(mIcons.frameSize().x * 2.f + ImGui::GetStyle().ItemSpacing.x);
     drawExamplesButton();
     ImGui::SameLine();
     drawSettingsButton();
@@ -172,9 +174,17 @@ void EditorView::drawSettingsPopup(float textSize) {
     ImGui::EndPopup();
 }
 
+// The icons have their own base size, so the text can be shorter or taller than the buttons and is centered on their row by hand.
 void EditorView::drawStatus() {
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextDisabled("%s%s", mStatus.file.c_str(), mStatus.dirty ? " (modified)" : "");
+    if (mStatus.file.empty())
+        return;
+    const std::string label = std::filesystem::path(mStatus.file).filename().string() + (mStatus.dirty ? " (modified)" : "");
+    const ImVec2 textSize = ImGui::CalcTextSize(label.c_str());
+    const float rowHeight = mIcons.frameSize().y;
+    ImGui::InvisibleButton("status", ImVec2(textSize.x, rowHeight));
+    ImGui::SetItemTooltip("%s", mStatus.file.c_str());
+    const ImVec2 min = ImGui::GetItemRectMin();
+    ImGui::GetWindowDrawList()->AddText(ImVec2(min.x, std::round(min.y + (rowHeight - textSize.y) * 0.5f)), ImGui::GetColorU32(ImGuiCol_TextDisabled), label.c_str());
 }
 
 void EditorView::handleShortcuts() {
