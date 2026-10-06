@@ -6,6 +6,7 @@
 #include <clap/clap.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -38,6 +39,7 @@ private:
     bool create();
     void destroy();
     bool getSize(uint32_t* width, uint32_t* height) const;
+    void adjustSize(uint32_t* width, uint32_t* height) const;
     bool setSize(uint32_t width, uint32_t height);
     bool setScale(double scale);
     bool setParent(const clap_window* window);
@@ -53,7 +55,7 @@ private:
     int mEventFd = -1;
     uint32_t mWidth;
     uint32_t mHeight;
-    double mScale = 1.0;
+    std::optional<double> mHostScale;
     EditorView mView;
     std::unique_ptr<EditorWindow> mWindow;
 };

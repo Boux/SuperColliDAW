@@ -3,6 +3,7 @@
 #include "Plugin.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace supercollidaw {
@@ -37,9 +38,8 @@ const clap_plugin_gui PluginGui::kExtension = {
         *hints = { .can_resize_horizontally = true, .can_resize_vertically = true, .preserve_aspect_ratio = false };
         return true;
     },
-    .adjust_size = [](const clap_plugin*, uint32_t* width, uint32_t* height) {
-        *width = std::max(*width, kMinWidth);
-        *height = std::max(*height, kMinHeight);
+    .adjust_size = [](const clap_plugin* plugin, uint32_t* width, uint32_t* height) {
+        from(plugin).adjustSize(width, height);
         return true;
     },
     .set_size = [](const clap_plugin* plugin, uint32_t width, uint32_t height) { return from(plugin).setSize(width, height); },
@@ -88,6 +88,12 @@ bool PluginGui::getSize(uint32_t* width, uint32_t* height) const {
     return true;
 }
 
+void PluginGui::adjustSize(uint32_t* width, uint32_t* height) const {
+    const double scale = mHostScale.value_or(1.0);
+    *width = std::max(*width, static_cast<uint32_t>(std::lround(kMinWidth * scale)));
+    *height = std::max(*height, static_cast<uint32_t>(std::lround(kMinHeight * scale)));
+}
+
 bool PluginGui::setSize(uint32_t width, uint32_t height) {
     mWidth = width;
     mHeight = height;
@@ -96,19 +102,26 @@ bool PluginGui::setSize(uint32_t width, uint32_t height) {
     return true;
 }
 
+// X11 and Win32 sizes are physical pixels, so the size follows the scale to keep the editor the same size on screen.
 bool PluginGui::setScale(double scale) {
-    mScale = scale;
+    const double change = scale / mHostScale.value_or(1.0);
+    mWidth = static_cast<uint32_t>(std::lround(mWidth * change));
+    mHeight = static_cast<uint32_t>(std::lround(mHeight * change));
+    mHostScale = scale;
     if (mWindow)
         mWindow->setScale(scale);
     return true;
 }
 
 bool PluginGui::setParent(const clap_window* window) {
-    mWindow = std::make_unique<EditorWindow>(nativeParent(*window), mWidth, mHeight, mScale, [this] { mView.draw(); });
+    mWindow = std::make_unique<EditorWindow>(nativeParent(*window), mWidth, mHeight, mHostScale.value_or(1.0), [this] { mView.draw(); });
     if (!mWindow->isRealized()) {
         mWindow.reset();
         return false;
     }
+    // CLAP hosts set the scale before embedding; one that does not leaves it to the plugin, so follow the system's.
+    if (!mHostScale)
+        mWindow->setScale(mWindow->systemScale());
     registerEventFd();
     return true;
 }

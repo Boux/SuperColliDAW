@@ -94,6 +94,8 @@ void EditorWindow::setScale(double scale) {
     ImGui::GetStyle() = style;
 }
 
+double EditorWindow::systemScale() const { return puglGetScaleFactor(mView); }
+
 void EditorWindow::show() { puglShow(mView, PUGL_SHOW_PASSIVE); }
 
 void EditorWindow::hide() { puglHide(mView); }

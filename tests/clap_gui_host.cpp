@@ -126,7 +126,7 @@ void writePpm(Display* display, Window window, uint32_t width, uint32_t height, 
 
 int main(int argc, char** argv) {
     if (argc < 4) {
-        std::fprintf(stderr, "usage: %s <plugin.clap> <seconds> <screenshot.ppm>\n", argv[0]);
+        std::fprintf(stderr, "usage: %s <plugin.clap> <seconds> <screenshot.ppm> [scale]\n", argv[0]);
         return 2;
     }
     const double seconds = std::atof(argv[2]);
@@ -149,6 +149,8 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "plugin gui could not be created\n");
         return 1;
     }
+    if (argc > 4)
+        gui->set_scale(plugin, std::atof(argv[4]));
     uint32_t width = 0, height = 0;
     gui->get_size(plugin, &width, &height);
 

@@ -24,6 +24,7 @@ public:
     bool isRealized() const { return mRealized; }
     void setSize(uint32_t width, uint32_t height);
     void setScale(double scale);
+    double systemScale() const;
     void show();
     void hide();
     void idle();
