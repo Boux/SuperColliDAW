@@ -31,6 +31,11 @@ add_executable(settings_file_test settings_file_test.cpp ${CMAKE_SOURCE_DIR}/src
 target_include_directories(settings_file_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME settings_file_test COMMAND settings_file_test)
 
+add_executable(theme_test theme_test.cpp ${CMAKE_SOURCE_DIR}/src/ui/theme/Themes.cpp ${CMAKE_SOURCE_DIR}/src/ui/theme/ColorScheme.cpp ${CMAKE_SOURCE_DIR}/src/ui/theme/Gruvbox.cpp ${CMAKE_SOURCE_DIR}/src/ui/theme/TomorrowNight.cpp)
+target_include_directories(theme_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(theme_test PRIVATE ui_imgui ui_texteditor)
+add_test(NAME theme_test COMMAND theme_test)
+
 add_executable(sample_clock_test sample_clock_test.cpp ${CMAKE_SOURCE_DIR}/src/engine/SampleClock.cpp)
 target_include_directories(sample_clock_test PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME sample_clock_test COMMAND sample_clock_test)

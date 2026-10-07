@@ -4,6 +4,7 @@
 #include "Icons.h"
 #include "SettingsForm.h"
 #include "SuperColliderLanguage.h"
+#include "theme/Theme.h"
 
 #include <imgui.h>
 
@@ -42,7 +43,8 @@ TextEditor::DocSelection selectionOrLine(const TextEditor& editor) {
     return wholeLines({ line, line });
 }
 
-void configureEditor(TextEditor& editor, const EditorSettings& settings) {
+void configureEditor(TextEditor& editor, const EditorSettings& settings, const Theme& theme) {
+    editor.SetPalette(theme.palette);
     editor.SetTabSize(static_cast<size_t>(settings.tabSize));
     editor.SetInsertSpacesOnTabs(settings.indentWithSpaces);
     editor.SetCompletePairedGlyphs(settings.closeBrackets);
@@ -201,8 +203,11 @@ void EditorView::drawSettingsPopup(float textSize) {
 }
 
 void EditorView::applyEditorSettings() {
-    configureEditor(mEditor, mSettings);
-    configureEditor(mExamples.viewer(), mSettings);
+    const Theme& theme = themeNamed(mSettings.theme);
+    configureEditor(mEditor, mSettings, theme);
+    configureEditor(mExamples.viewer(), mSettings, theme);
+    mPostWindow.setColors(theme.postError, theme.postWarning);
+    mFlash.setColor(theme.flash);
 }
 
 // The icons have their own base size, so the text can be shorter or taller than the buttons and is centered on their row by hand.

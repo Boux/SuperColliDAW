@@ -4,6 +4,7 @@
 #include "Fonts.h"
 #include "IconButtons.h"
 #include "PuglImGuiInput.h"
+#include "theme/Theme.h"
 
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
@@ -155,7 +156,7 @@ const EditorWindow::LoadedFont& EditorWindow::loadedFont(std::string_view name) 
 void EditorWindow::applyStyle() {
     const LoadedFont& font = loadedFont(mSettings.font);
     ImGuiStyle style;
-    ImGui::StyleColorsDark(&style);
+    std::ranges::copy(themeNamed(mSettings.theme).styleColors, style.Colors);
     style.ScaleAllSizes(static_cast<float>(mScale));
     // The size setting goes into FontSizeBase, because ImGui applies FontScaleMain to the icon font too.
     style.FontSizeBase = textSize(*font.source, font.baseSize, mSettings.fontSizePercent, mScale);
@@ -216,7 +217,8 @@ PuglStatus EditorWindow::drawFrame() {
     ImGui::Render();
 
     glViewport(0, 0, size.width, size.height);
-    glClearColor(0.f, 0.f, 0.f, 1.f);
+    const ImVec4& background = ImGui::GetStyle().Colors[ImGuiCol_WindowBg];
+    glClearColor(background.x, background.y, background.z, 1.f);
     glClear(GL_COLOR_BUFFER_BIT);
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     updateCursor();

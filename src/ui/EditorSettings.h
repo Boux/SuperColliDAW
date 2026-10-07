@@ -5,6 +5,7 @@
 
 namespace supercollidaw {
 
+constexpr char kDefaultTheme[] = "Dark";
 constexpr char kDefaultFont[] = "DejaVu Sans Mono";
 
 struct EditorSettings {
@@ -12,6 +13,7 @@ struct EditorSettings {
     static constexpr int kMaxFontSizePercent = 200;
     static constexpr std::array kTabSizes = { 2, 4, 8 };
 
+    std::string theme = kDefaultTheme;
     std::string font = kDefaultFont;
     int fontSizePercent = 100;
     int tabSize = 4;

@@ -7,21 +7,9 @@ namespace supercollidaw {
 
 namespace {
 
-constexpr ImVec4 kErrorColor(1.f, 0.45f, 0.4f, 1.f);
-constexpr ImVec4 kWarningColor(0.95f, 0.8f, 0.35f, 1.f);
-
 bool contains(const std::string& line, const char* text) { return line.find(text) != std::string::npos; }
 
-const ImVec4* colorFor(const std::string& line) {
-    if (contains(line, "ERROR") || contains(line, "FAILURE IN SERVER"))
-        return &kErrorColor;
-    if (contains(line, "WARNING"))
-        return &kWarningColor;
-    return nullptr;
-}
-
-void drawLine(const std::string& line) {
-    const ImVec4* color = colorFor(line);
+void drawLine(const std::string& line, const ImU32* color) {
     if (color)
         ImGui::PushStyleColor(ImGuiCol_Text, *color);
     ImGui::TextUnformatted(line.data(), line.data() + line.size());
@@ -29,6 +17,11 @@ void drawLine(const std::string& line) {
         ImGui::PopStyleColor();
 }
 
+}
+
+void PostWindow::setColors(ImU32 error, ImU32 warning) {
+    mErrorColor = error;
+    mWarningColor = warning;
 }
 
 void PostWindow::draw(const ImVec2& size) {
@@ -57,8 +50,16 @@ void PostWindow::drawLines() {
     clipper.Begin(static_cast<int>(mLines.size()));
     while (clipper.Step()) {
         for (int line = clipper.DisplayStart; line < clipper.DisplayEnd; ++line)
-            drawLine(mLines[line]);
+            drawLine(mLines[line], colorFor(mLines[line]));
     }
+}
+
+const ImU32* PostWindow::colorFor(const std::string& line) const {
+    if (contains(line, "ERROR") || contains(line, "FAILURE IN SERVER"))
+        return &mErrorColor;
+    if (contains(line, "WARNING"))
+        return &mWarningColor;
+    return nullptr;
 }
 
 void PostWindow::drawContextMenu() {

@@ -51,6 +51,7 @@ struct SettingEntry {
 };
 
 constexpr SettingEntry kEntries[] = {
+    { "theme", [](EditorSettings& settings, std::string_view value) { settings.theme = value; }, [](const EditorSettings& settings) { return settings.theme; } },
     { "font", [](EditorSettings& settings, std::string_view value) { settings.font = value; }, [](const EditorSettings& settings) { return settings.font; } },
     { "font_size_percent", [](EditorSettings& settings, std::string_view value) { settings.fontSizePercent = parsePercent(value, settings.fontSizePercent); }, [](const EditorSettings& settings) { return std::to_string(settings.fontSizePercent); } },
     { "tab_size", [](EditorSettings& settings, std::string_view value) { settings.tabSize = parseTabSize(value, settings.tabSize); }, [](const EditorSettings& settings) { return std::to_string(settings.tabSize); } },

@@ -18,11 +18,11 @@ void check(const char* name, bool passed) {
 }
 
 int main() {
-    const EditorSettings chosen{ .font = "Cozette", .fontSizePercent = 150, .tabSize = 2, .indentWithSpaces = true, .closeBrackets = false };
+    const EditorSettings chosen{ .theme = "Gruvbox Light", .font = "Cozette", .fontSizePercent = 150, .tabSize = 2, .indentWithSpaces = true, .closeBrackets = false };
     check("formatted settings read back the same", parseSettings(formatSettings(chosen)) == chosen);
     check("an empty file gives the defaults", parseSettings("") == EditorSettings{});
     check("spaces and CRLF line ends are ignored", parseSettings("  font =  JetBrains Mono \r\nfont_size_percent= 80\r\n") == EditorSettings{ .font = "JetBrains Mono", .fontSizePercent = 80 });
-    check("unknown keys and lines without = are ignored", parseSettings("theme = gruvbox\njunk\nfont_size_percent = 120\n") == EditorSettings{ .fontSizePercent = 120 });
+    check("unknown keys and lines without = are ignored", parseSettings("colour = red\njunk\nfont_size_percent = 120\n") == EditorSettings{ .fontSizePercent = 120 });
     check("a size that is not a number keeps the default", parseSettings("font_size_percent = big\n").fontSizePercent == 100);
     check("a size out of range is clamped", parseSettings("font_size_percent = 900\n").fontSizePercent == EditorSettings::kMaxFontSizePercent);
     check("a tab size the form does not offer keeps the default", parseSettings("tab_size = 3\n").tabSize == 4);

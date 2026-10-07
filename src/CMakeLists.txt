@@ -42,6 +42,10 @@ add_library(supercollidaw_ui OBJECT
     ui/SettingsForm.cpp
     ui/SignatureHint.cpp
     ui/SuperColliderLanguage.cpp
+    ui/theme/ColorScheme.cpp
+    ui/theme/Gruvbox.cpp
+    ui/theme/Themes.cpp
+    ui/theme/TomorrowNight.cpp
 )
 target_include_directories(supercollidaw_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(supercollidaw_ui PUBLIC ui_pugl ui_imgui ui_texteditor)

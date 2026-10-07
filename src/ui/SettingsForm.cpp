@@ -1,6 +1,7 @@
 #include "SettingsForm.h"
 
 #include "Fonts.h"
+#include "theme/Theme.h"
 
 #include <imgui.h>
 
@@ -43,13 +44,14 @@ bool drawFontSize(EditorSettings& settings, float textSize) {
 }
 
 bool drawSettingsForm(EditorSettings& settings, float textSize) {
+    const bool themeChanged = drawCombo("Theme", settings.theme, themes() | std::views::transform(&Theme::name));
     const bool fontChanged = drawCombo("Font", settings.font, bundledFonts() | std::views::transform(&BundledFont::name));
     const bool sizeChanged = drawFontSize(settings, textSize);
     ImGui::Separator();
     const bool tabSizeChanged = drawCombo("Tab size", settings.tabSize, EditorSettings::kTabSizes);
     const bool indentChanged = ImGui::Checkbox("Indent with spaces", &settings.indentWithSpaces);
     const bool bracketsChanged = ImGui::Checkbox("Close brackets and quotes", &settings.closeBrackets);
-    return fontChanged || sizeChanged || tabSizeChanged || indentChanged || bracketsChanged;
+    return themeChanged || fontChanged || sizeChanged || tabSizeChanged || indentChanged || bracketsChanged;
 }
 
 }
