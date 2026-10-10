@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches the version in CMakeLists.txt
+        run: |
+          version=$(sed -n 's/^project(supercollidaw VERSION \([0-9.]*\) .*/\1/p' CMakeLists.txt)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::The tag is $GITHUB_REF_NAME, but CMakeLists.txt says version $version"
+            exit 1
+          fi
+
+  build:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - name: linux
+            runner: ubuntu-24.04
+            script: packaging/linux/build.sh
+            package: build-linux/SuperColliDAW-linux-x64.tar.gz
+          - name: windows
+            runner: ubuntu-24.04
+            script: packaging/windows/build.sh
+            package: build-windows/SuperColliDAW-windows-x64.zip
+          - name: macos
+            runner: macos-15
+            script: packaging/macos/build.sh
+            package: build-macos/SuperColliDAW-macos.zip
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: SuperCollider's submodules
+        run: git -C third_party/supercollider submodule update --init external_libraries/nova-simd external_libraries/nova-tt
+
+      - name: Build
+        run: ${{ matrix.script }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.package }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Draft the release
+        run: gh release create "$GITHUB_REF_NAME" dist/* --draft --verify-tag --generate-notes --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ github.token }}
