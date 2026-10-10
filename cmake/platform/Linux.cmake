@@ -1,8 +1,6 @@
 # Linux: an X11 editor window, and SuperCollider's core UGens bundled next to the plugin.
 
 find_package(X11 REQUIRED COMPONENTS Xcursor Xrandr Xext)
-set(PUGL_PATCHED_DIR ${CMAKE_BINARY_DIR}/pugl_patched)
-patch_sources(${PUGL_DIR} ${PUGL_PATCHED_DIR} ${CMAKE_SOURCE_DIR}/patches/pugl src/x11.c)
 target_sources(ui_pugl PRIVATE ${PUGL_PATCHED_DIR}/src/x11.c ${PUGL_DIR}/src/x11_gl.c)
 target_compile_definitions(ui_pugl PRIVATE USE_XCURSOR=1 USE_XRANDR=1 USE_XSYNC=1 _POSIX_C_SOURCE=200809L)
 target_link_libraries(ui_pugl PUBLIC X11::X11 X11::Xcursor X11::Xrandr X11::Xext)

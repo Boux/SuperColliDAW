@@ -7,6 +7,8 @@ set(TEXTEDIT_DIR ${CMAKE_SOURCE_DIR}/third_party/ImGuiColorTextEdit)
 
 find_package(OpenGL REQUIRED)
 
+set(PUGL_PATCHED_DIR ${CMAKE_BINARY_DIR}/pugl_patched)
+patch_sources(${PUGL_DIR} ${PUGL_PATCHED_DIR} ${CMAKE_SOURCE_DIR}/patches/pugl src/win.c src/x11.c)
 add_library(ui_pugl STATIC ${PUGL_DIR}/src/common.c ${PUGL_DIR}/src/internal.c)
 target_include_directories(ui_pugl PUBLIC ${PUGL_DIR}/include PRIVATE ${PUGL_DIR}/src)
 target_compile_definitions(ui_pugl PUBLIC PUGL_STATIC PRIVATE PUGL_INTERNAL)

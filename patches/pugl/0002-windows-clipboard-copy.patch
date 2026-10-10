@@ -1,0 +1,23 @@
+diff --git a/src/win.c b/src/win.c
+index 5b74c10..b141e49 100644
+--- a/src/win.c
++++ b/src/win.c
+@@ -1528,6 +1528,9 @@ puglSetClipboard(PuglView* const     view,
+     return PUGL_UNKNOWN_ERROR;
+   }
+ 
++  // Take ownership, which SetClipboardData requires
++  EmptyClipboard();
++
+   // Measure string and allocate global memory for clipboard
+   const char* str   = (const char*)impl->clipboard.data;
+   const int   wsize = MultiByteToWideChar(CP_UTF8, 0, str, -1, NULL, 0);
+@@ -1546,7 +1549,7 @@ puglSetClipboard(PuglView* const     view,
+   }
+ 
+   // Convert string into global memory and set it as clipboard data
+-  MultiByteToWideChar(CP_UTF8, 0, str, (int)len, wstr, wsize);
++  MultiByteToWideChar(CP_UTF8, 0, str, -1, wstr, wsize);
+   GlobalUnlock(mem);
+   SetClipboardData(CF_UNICODETEXT, mem);
+   CloseClipboard();

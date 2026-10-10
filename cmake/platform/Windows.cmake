@@ -1,6 +1,6 @@
 # Windows: a Win32 editor window, and SuperCollider's core UGens bundled next to the plugin.
 
-target_sources(ui_pugl PRIVATE ${PUGL_DIR}/src/win.c ${PUGL_DIR}/src/win_gl.c)
+target_sources(ui_pugl PRIVATE ${PUGL_PATCHED_DIR}/src/win.c ${PUGL_DIR}/src/win_gl.c)
 target_compile_definitions(ui_pugl PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN)
 target_link_libraries(ui_pugl PUBLIC dwmapi gdi32 shell32 shlwapi user32)
 
