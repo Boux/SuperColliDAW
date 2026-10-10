@@ -56,6 +56,7 @@ private:
 
     void useSystemKeyRepeat(ImGuiIO& io);
     void takeFocusOnActivation();
+    uint32_t toPixels(uint32_t size) const;
     PuglStatus handle(const PuglEvent& event);
     PuglStatus startRenderer();
     PuglStatus stopRenderer();

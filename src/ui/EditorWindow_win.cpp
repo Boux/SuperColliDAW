@@ -8,6 +8,8 @@ void EditorWindow::useSystemKeyRepeat(ImGuiIO&) {}
 // TODO: check on native Windows whether activating the plugin window without clicking the editor leaves the keyboard with the DAW.
 void EditorWindow::takeFocusOnActivation() {}
 
+uint32_t EditorWindow::toPixels(uint32_t size) const { return size; }
+
 int EditorWindow::eventFd() const { return -1; }
 
 }

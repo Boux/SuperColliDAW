@@ -15,19 +15,24 @@ constexpr char kTextType[] = "text/plain";
 
 PuglClipboard& clipboardOf(ImGuiContext*) { return *static_cast<PuglClipboard*>(ImGui::GetPlatformIO().Platform_ClipboardUserData); }
 
+// ImGui swaps Cmd and Ctrl on macOS, so shortcuts that are Ctrl elsewhere are Cmd there.
+bool usesCmdShortcuts() { return ImGui::GetIO().ConfigMacOSXBehaviors; }
+
 bool isPasteShortcut(const PuglKeyEvent& key) {
-    const bool ctrlV = (key.state & PUGL_MOD_CTRL) && unshiftedKey(key) == 'v';
+    const PuglMods command = usesCmdShortcuts() ? PUGL_MOD_SUPER : PUGL_MOD_CTRL;
+    const bool commandV = (key.state & command) && unshiftedKey(key) == 'v';
     const bool shiftInsert = (key.state & PUGL_MOD_SHIFT) && key.key == PUGL_KEY_INSERT;
-    return ctrlV || shiftInsert;
+    return commandV || shiftInsert;
 }
 
 bool isText(const char* type) { return type && !std::strncmp(type, "text/", 5); }
 
 void replayPasteShortcut(ImGuiIO& io) {
-    io.AddKeyEvent(ImGuiMod_Ctrl, true);
+    const ImGuiKey command = usesCmdShortcuts() ? ImGuiMod_Super : ImGuiMod_Ctrl;
+    io.AddKeyEvent(command, true);
     io.AddKeyEvent(ImGuiKey_V, true);
     io.AddKeyEvent(ImGuiKey_V, false);
-    io.AddKeyEvent(ImGuiMod_Ctrl, false);
+    io.AddKeyEvent(command, false);
 }
 
 }

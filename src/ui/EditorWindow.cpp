@@ -93,7 +93,7 @@ EditorWindow::EditorWindow(PuglNativeView parent, uint32_t width, uint32_t heigh
     puglSetViewHint(mView, PUGL_CONTEXT_PROFILE, PUGL_OPENGL_CORE_PROFILE);
     puglSetViewHint(mView, PUGL_DOUBLE_BUFFER, PUGL_TRUE);
     puglSetViewHint(mView, PUGL_RESIZABLE, PUGL_TRUE);
-    puglSetSizeHint(mView, PUGL_DEFAULT_SIZE, width, height);
+    puglSetSizeHint(mView, PUGL_DEFAULT_SIZE, toPixels(width), toPixels(height));
     puglSetParent(mView, parent);
     mRealized = puglRealize(mView) == PUGL_SUCCESS;
 }
@@ -105,7 +105,7 @@ EditorWindow::~EditorWindow() {
     ImGui::DestroyContext(mImGui);
 }
 
-void EditorWindow::setSize(uint32_t width, uint32_t height) { puglSetSizeHint(mView, PUGL_CURRENT_SIZE, width, height); }
+void EditorWindow::setSize(uint32_t width, uint32_t height) { puglSetSizeHint(mView, PUGL_CURRENT_SIZE, toPixels(width), toPixels(height)); }
 
 void EditorWindow::setScale(double scale) {
     mScale = scale;

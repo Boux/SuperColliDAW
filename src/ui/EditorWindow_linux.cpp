@@ -102,6 +102,8 @@ void EditorWindow::takeFocusOnActivation() {
     puglGrabFocus(mView);
 }
 
+uint32_t EditorWindow::toPixels(uint32_t size) const { return size; }
+
 int EditorWindow::eventFd() const { return ConnectionNumber(static_cast<Display*>(puglGetNativeWorld(mWorld))); }
 
 }

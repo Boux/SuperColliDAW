@@ -10,6 +10,9 @@ target_link_libraries(ui_pugl PUBLIC X11::X11 X11::Xcursor X11::Xrandr X11::Xext
 set(SC_PLUGIN_SUFFIX .so)
 target_compile_definitions(scsynth_embedded PUBLIC "SC_PLUGIN_EXT=\"${SC_PLUGIN_SUFFIX}\"")
 target_link_libraries(scsynth_embedded PUBLIC rt)
+pkg_check_modules(FFTW3F REQUIRED IMPORTED_TARGET fftw3f)
+target_compile_definitions(scsynth_embedded PUBLIC SC_FFT_FFTW)
+target_link_libraries(scsynth_embedded PUBLIC PkgConfig::FFTW3F)
 
 target_sources(supercollidaw_engine PRIVATE src/engine/InstalledSuperCollider_linux.cpp)
 target_sources(supercollidaw_lang PRIVATE src/lang/SclangProcess_linux.cpp src/lang/StdinWriter_posix.cpp)

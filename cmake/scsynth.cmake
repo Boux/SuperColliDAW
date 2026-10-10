@@ -22,7 +22,6 @@ configure_file(${SC_ROOT}/common/SC_Version.hpp.in ${SC_GENERATED_DIR}/SC_Versio
 find_package(Threads REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
-pkg_check_modules(FFTW3F REQUIRED IMPORTED_TARGET fftw3f)
 
 add_library(sc_tlsf STATIC ${SC_EXT}/TLSF-2.4.6/src/tlsf.c)
 target_compile_definitions(sc_tlsf PRIVATE TLSF_STATISTIC=1)
@@ -86,13 +85,12 @@ target_compile_definitions(scsynth_embedded PUBLIC
     SC_AUDIO_API=SC_AUDIO_API_PLUGIN
     SC_MEMORY_ALIGNMENT=32
     NOVA_SIMD
-    SC_FFT_FFTW
     BOOST_CHRONO_HEADER_ONLY
     BOOST_CONFIG_SUPPRESS_OUTDATED_MESSAGE
     _REENTRANT
 )
 
-target_link_libraries(scsynth_embedded PUBLIC sc_tlsf PkgConfig::SNDFILE PkgConfig::FFTW3F Threads::Threads ${CMAKE_DL_LIBS})
+target_link_libraries(scsynth_embedded PUBLIC sc_tlsf PkgConfig::SNDFILE Threads::Threads ${CMAKE_DL_LIBS})
 
 # Upstream SuperCollider code; its warnings are not ours to fix.
 target_compile_options(scsynth_embedded PRIVATE -w)
