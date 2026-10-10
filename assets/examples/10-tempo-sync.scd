@@ -18,6 +18,6 @@
     // one vibrato cycle per beat
     var vibrato = SinOsc.kr(bpm / 60).range(0.995, 1.005);
 
-    RLPF.ar(Saw.ar([55, 55.2] * vibrato), cutoff, 0.3) * tremolo * 0.1
+    RLPF.ar(Saw.ar([55, 55.2] * vibrato), cutoff, 0.3) * tremolo * 0.1;
 }.play;
 )

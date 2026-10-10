@@ -33,7 +33,7 @@
     // (MPE timbre) moves the cutoff up to an octave down or up
     sig = RLPF.ar(sig, (cutoff * (2 ** timbre.lag(0.1))).clip(20, 18000), rq).tanh * 0.15;
 
-    sig * env * amp
+    sig * env * amp;
 };
 );
 

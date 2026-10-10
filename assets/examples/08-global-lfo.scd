@@ -12,6 +12,6 @@
     // every voice reads the same LFO
     var sig = Saw.ar(freq * ~lfoBus.kr * [1, 1.003]);
 
-    LPF.ar(sig, freq * 6) * env * amp * 0.2
+    LPF.ar(sig, freq * 6) * env * amp * 0.2;
 };
 )

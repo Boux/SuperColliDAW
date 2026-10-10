@@ -4,7 +4,7 @@
 // whatever the synth returns goes back out to the track
 
 (
-{
+Ndef(\fx, {
     var in = SoundIn.ar([0, 1]);
 
     // see the "Parameters" example for an explanation of this
@@ -15,6 +15,6 @@
 
     var echoes = CombC.ar(in, 2, time, 3);
 
-    in + (echoes * mix)
-}.play;
+    in + (echoes * mix);
+}).play;
 )

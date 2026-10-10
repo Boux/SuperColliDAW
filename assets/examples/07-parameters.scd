@@ -41,7 +41,7 @@
     var sig = Saw.ar(110 * (2 ** octave)) * drive;
     sig = RLPF.ar(sig, cutoff * SinOsc.kr(4).range(1 - (wobble * 0.5), 1), rq).tanh;
 
-    Pan2.ar(sig * gain * 0.15, pan)
+    Pan2.ar(sig * gain * 0.15, pan);
 }.play;
 );
 
