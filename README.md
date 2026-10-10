@@ -6,6 +6,10 @@ It's currently only a CLAP plugin, but I will probably also add a VST3 version e
 
 This is a very early BETA version, there's probably gonna be bugs, jank, and random issues specific to different DAWs. I have not tested mac OS, I don't have a mac and I have no idea if it works, I just let github compile it for me. I have been developing it for linux first, and I did some minimal testing on the windows version, only in Bitwig and Reaper. If something goes wrong, please [open an issue](https://github.com/Boux/SuperColliDAW/issues).
 
+## Demo
+
+https://github.com/user-attachments/assets/6b006c26-2a56-4dc3-8923-f7c7d37863d2
+
 ## Install
 
 1. Install [SuperCollider 3.14](https://supercollider.github.io/downloads) if you haven't yet. On a Mac, put it in your Applications folder.
