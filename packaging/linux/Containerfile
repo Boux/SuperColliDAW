@@ -1,0 +1,32 @@
+FROM docker.io/library/almalinux:8
+
+# glibc 2.28 is the oldest system the plugin runs on. gcc-toolset-14 compiles C++20 for it: what is newer than
+# the system's libstdc++ goes into the binary itself.
+RUN dnf -y install dnf-plugins-core \
+    && dnf config-manager --set-enabled powertools \
+    && dnf -y install gcc-toolset-14-gcc-c++ cmake ninja-build make diffutils patch pkgconf-pkg-config tar xz \
+       libX11-devel libXcursor-devel libXrandr-devel libXext-devel mesa-libGL-devel \
+    && dnf clean all
+
+ENV PKG_CONFIG_PATH=/usr/local/lib64/pkgconfig:/usr/local/lib/pkgconfig
+
+# libsndfile and FFTW are linked in statically, as on Windows, so the plugin does not depend on the versions a
+# distribution or Bitwig's Flatpak runtime happens to ship.
+# TODO: build libogg, libvorbis, flac and opus statically too, so Buffer.read handles the same formats as SuperCollider's own builds.
+ARG LIBSNDFILE_VERSION=1.2.2
+RUN . /opt/rh/gcc-toolset-14/enable \
+    && curl -fsSL https://github.com/libsndfile/libsndfile/releases/download/${LIBSNDFILE_VERSION}/libsndfile-${LIBSNDFILE_VERSION}.tar.xz | tar --no-same-owner -xJ -C /tmp \
+    && cmake -S /tmp/libsndfile-${LIBSNDFILE_VERSION} -B /tmp/libsndfile-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUILD_SHARED_LIBS=OFF -DENABLE_EXTERNAL_LIBS=OFF -DENABLE_MPEG=OFF -DBUILD_PROGRAMS=OFF -DBUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF -DENABLE_CPACK=OFF -DINSTALL_MANPAGES=OFF \
+    && cmake --build /tmp/libsndfile-build \
+    && cmake --install /tmp/libsndfile-build \
+    && rm -rf /tmp/libsndfile-*
+
+# FFTW picks its SIMD code at runtime, so the AVX builds still run on CPUs without AVX.
+ARG FFTW_VERSION=3.3.10
+RUN . /opt/rh/gcc-toolset-14/enable \
+    && curl -fsSL https://www.fftw.org/fftw-${FFTW_VERSION}.tar.gz | tar --no-same-owner -xz -C /tmp \
+    && cd /tmp/fftw-${FFTW_VERSION} \
+    && ./configure --enable-float --enable-static --disable-shared --with-pic --enable-sse2 --enable-avx --enable-avx2 --disable-fortran --disable-doc \
+    && make -j"$(nproc)" \
+    && make install \
+    && rm -rf /tmp/fftw-*
