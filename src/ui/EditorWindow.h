@@ -71,7 +71,6 @@ private:
     EditorSettings mSettings;
     bool mStyleOutdated = true;
     bool mRealized = false;
-    bool mRendererStarted = false;
     PuglCursor mCursor = PUGL_CURSOR_ARROW;
     double mLastFrameTime = 0.0;
 };

@@ -190,14 +190,11 @@ PuglStatus EditorWindow::handle(const PuglEvent& event) {
 }
 
 PuglStatus EditorWindow::startRenderer() {
-    mRendererStarted = ImGui_ImplOpenGL3_Init(kGlslVersion);
-    return mRendererStarted ? PUGL_SUCCESS : PUGL_BACKEND_FAILED;
+    return ImGui_ImplOpenGL3_Init(kGlslVersion) ? PUGL_SUCCESS : PUGL_BACKEND_FAILED;
 }
 
-// pugl sends PUGL_UNREALIZE even when PUGL_REALIZE failed, and ImGui keeps no renderer after a failed init.
 PuglStatus EditorWindow::stopRenderer() {
-    if (std::exchange(mRendererStarted, false))
-        ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplOpenGL3_Shutdown();
     return PUGL_SUCCESS;
 }
 
