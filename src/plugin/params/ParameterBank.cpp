@@ -1,8 +1,9 @@
 #include "ParameterBank.h"
 
 #include <algorithm>
-#include <charconv>
 #include <cstdio>
+#include <locale>
+#include <sstream>
 
 namespace supercollidaw {
 
@@ -21,13 +22,13 @@ void markUsed(std::array<bool, ParameterBank::kCount>& used, const std::set<uint
         used[*bus] = true;
 }
 
+// Apple's C++ library has no std::from_chars for double, and std::strtod follows the host's locale.
 std::optional<double> parseNumber(std::string_view text) {
-    const auto start = text.find_first_not_of(' ');
-    if (start == std::string_view::npos)
-        return std::nullopt;
+    std::istringstream stream { std::string(text) };
+    stream.imbue(std::locale::classic());
     double value = 0.0;
-    const auto [end, error] = std::from_chars(text.data() + start, text.data() + text.size(), value);
-    return error == std::errc() ? std::optional<double>(value) : std::nullopt;
+    stream >> value;
+    return stream.fail() ? std::nullopt : std::optional<double>(value);
 }
 
 }
