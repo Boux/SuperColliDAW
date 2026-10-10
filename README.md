@@ -4,7 +4,7 @@ It's SuperCollider, but directly in your DAW. It's a scsynth server sandboxed di
 
 It's currently only a CLAP plugin, but I will probably also add a VST3 version eventually for DAWs without CLAP support (ableton, cubase, etc). CLAP has much better MPE support and it's easier to define dynamic parameters for stuff like `In.kr`.
 
-This is a very early BETA version, there's probably gonna be bugs and jank with keybaord inputs specific to different DAWs. I have not tested mac OS, I don't have a mac and I have no idea if it works, I just let github compile it for me. I have been developing it for linux first, and I did some minimal testing on the windows version, only in Bitwig and Reaper. If something goes wrong, please [open an issue](https://github.com/Boux/SuperColliDAW/issues).
+This is a very early BETA version, there's probably gonna be bugs, jank, and random issues specific to different DAWs. I have not tested mac OS, I don't have a mac and I have no idea if it works, I just let github compile it for me. I have been developing it for linux first, and I did some minimal testing on the windows version, only in Bitwig and Reaper. If something goes wrong, please [open an issue](https://github.com/Boux/SuperColliDAW/issues).
 
 ## Install
 
