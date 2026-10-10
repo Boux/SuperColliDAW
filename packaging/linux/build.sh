@@ -13,6 +13,7 @@ podman run --rm -v "$root:/src" -w /src "$image" sh -euc '
     mkdir -p build-linux/package
     strip -o build-linux/package/SuperColliDAW.clap build-linux/src/SuperColliDAW.clap
     cp -r build-linux/src/SuperColliDAW build-linux/package/
+    strip build-linux/package/SuperColliDAW/plugins/*.so
     cd build-linux/package && cmake -E tar czf ../SuperColliDAW-linux-x64.tar.gz SuperColliDAW.clap SuperColliDAW
 '
 echo "$root/build-linux/SuperColliDAW-linux-x64.tar.gz"

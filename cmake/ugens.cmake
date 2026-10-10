@@ -1,5 +1,5 @@
-# bundle_ugens(<target> <dest dir> <out var>): builds SuperCollider's core UGens into <dest dir> before <target> builds,
-# and sets <out var> to their targets.
+# bundle_ugens(<target> <dest dir> <suffix> <out var>): builds SuperCollider's core UGens into <dest dir>, with the file
+# suffix scsynth looks for, before <target> builds, and sets <out var> to their targets.
 # Mirrors third_party/supercollider/server/plugins/CMakeLists.txt, without the supernova variants.
 
 set(SC_UGENS_DIR ${SC_ROOT}/server/plugins)
@@ -9,7 +9,7 @@ set(SC_SINGLE_FILE_UGENS
     MulAddUGens NoiseUGens OscUGens PanUGens PhysicalModelingUGens ReverbUGens TestUGens TriggerUGens UnaryOpUGens UnpackFFTUGens
 )
 
-function(bundle_ugens target dest out_var)
+function(bundle_ugens target dest suffix out_var)
     set(ugens)
     foreach(name ${SC_SINGLE_FILE_UGENS})
         add_library(${name} MODULE ${SC_UGENS_DIR}/${name}.cpp)
@@ -37,7 +37,7 @@ function(bundle_ugens target dest out_var)
         target_compile_definitions(${ugen} PRIVATE NOVA_SIMD BOOST_CHRONO_HEADER_ONLY BOOST_CONFIG_SUPPRESS_OUTDATED_MESSAGE)
         # Upstream SuperCollider code; its warnings are not ours to fix.
         target_compile_options(${ugen} PRIVATE -w -fno-math-errno -fno-finite-math-only)
-        set_target_properties(${ugen} PROPERTIES PREFIX "" SUFFIX ".scx" LIBRARY_OUTPUT_DIRECTORY ${dest} CXX_STANDARD 17)
+        set_target_properties(${ugen} PROPERTIES PREFIX "" SUFFIX ${suffix} LIBRARY_OUTPUT_DIRECTORY ${dest} CXX_STANDARD 17)
     endforeach()
     add_dependencies(${target} ${ugens})
     set(${out_var} ${ugens} PARENT_SCOPE)

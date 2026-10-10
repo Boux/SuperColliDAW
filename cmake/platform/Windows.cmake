@@ -14,7 +14,7 @@ target_sources(supercollidaw_ui PRIVATE src/ui/EditorWindow_win.cpp)
 target_sources(supercollidaw_clap PRIVATE src/plugin/PluginGui_win.cpp src/plugin/PluginPaths_win.cpp)
 
 get_target_property(PLUGIN_BINARY_DIR supercollidaw_clap BINARY_DIR)
-bundle_ugens(supercollidaw_clap ${PLUGIN_BINARY_DIR}/SuperColliDAW/plugins BUNDLED_UGENS)
+bundle_ugens(supercollidaw_clap ${PLUGIN_BINARY_DIR}/SuperColliDAW/plugins .scx BUNDLED_UGENS)
 foreach(ugen ${BUNDLED_UGENS})
     target_compile_definitions(${ugen} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _WIN32_WINNT=0x0600)
     target_link_libraries(${ugen} PRIVATE ws2_32)
