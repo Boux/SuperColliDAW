@@ -88,3 +88,5 @@ target_link_libraries(supercollidaw_clap PRIVATE supercollidaw_engine supercolli
 set_target_properties(supercollidaw_clap PROPERTIES OUTPUT_NAME SuperColliDAW PREFIX "" SUFFIX ".clap")
 copy_resources(supercollidaw_clap ${CMAKE_SOURCE_DIR}/sclang *.sc ${CMAKE_CURRENT_BINARY_DIR}/SuperColliDAW/classes)
 copy_resources(supercollidaw_clap ${CMAKE_SOURCE_DIR}/assets/examples *.scd ${CMAKE_CURRENT_BINARY_DIR}/SuperColliDAW/examples)
+copy_resources(supercollidaw_clap ${CMAKE_SOURCE_DIR}/licenses * ${CMAKE_CURRENT_BINARY_DIR}/SuperColliDAW/licenses)
+configure_file(${CMAKE_SOURCE_DIR}/LICENSE ${CMAKE_CURRENT_BINARY_DIR}/SuperColliDAW/LICENSE COPYONLY)
