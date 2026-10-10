@@ -58,7 +58,7 @@ void forwardModifiers(ImGuiIO& io, PuglMods state) {
 
 void forwardKey(ImGuiIO& io, const PuglKeyEvent& key, bool pressed) {
     forwardModifiers(io, key.state);
-    const ImGuiKey imguiKey = toImGuiKey(key.key);
+    const ImGuiKey imguiKey = toImGuiKey(unshiftedKey(key));
     if (imguiKey != ImGuiKey_None)
         io.AddKeyEvent(imguiKey, pressed);
 }
@@ -91,6 +91,12 @@ void forwardScroll(ImGuiIO& io, const PuglScrollEvent& scroll) {
 
 }
 
+uint32_t unshiftedKey(const PuglKeyEvent& key) {
+    if (key.key >= 'A' && key.key <= 'Z')
+        return key.key - 'A' + 'a';
+    return key.key;
+}
+
 void forwardToImGui(ImGuiIO& io, const PuglEvent& event) {
     switch (event.type) {
     case PUGL_KEY_PRESS:
@@ -111,10 +117,6 @@ void forwardToImGui(ImGuiIO& io, const PuglEvent& event) {
         return forwardPointerOut(io, event.crossing);
     case PUGL_SCROLL:
         return forwardScroll(io, event.scroll);
-    case PUGL_FOCUS_IN:
-        return io.AddFocusEvent(true);
-    case PUGL_FOCUS_OUT:
-        return io.AddFocusEvent(false);
     default:
         return;
     }

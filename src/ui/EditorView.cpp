@@ -97,7 +97,9 @@ void EditorView::setFixedFonts(const FixedFonts& fonts) {
     mIcons.setFont(fonts.icons);
 }
 
-void EditorView::draw() {
+void EditorView::draw(bool hasFocus) {
+    mEditor.SetCaretsVisible(hasFocus);
+    mExamples.viewer().SetCaretsVisible(hasFocus);
     ImGui::SetNextWindowPos(ImVec2(0.f, 0.f));
     ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
     ImGui::Begin("SuperColliDAW", nullptr, kFullWindowFlags);

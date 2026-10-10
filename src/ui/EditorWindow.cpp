@@ -126,6 +126,7 @@ void EditorWindow::show() { puglShow(mView, PUGL_SHOW_PASSIVE); }
 void EditorWindow::hide() { puglHide(mView); }
 
 void EditorWindow::idle() {
+    takeFocusOnActivation();
     puglObscureView(mView);
     processEvents();
 }
@@ -203,14 +204,18 @@ PuglStatus EditorWindow::drawFrame() {
         applyStyle();
     const PuglArea size = puglGetSizeHint(mView, PUGL_CURRENT_SIZE);
     const double now = puglGetTime(mWorld);
+    // pugl's X11 backend hasn't dispatched PUGL_FOCUS_IN/OUT since its commit bc1419ec, so focus is polled every frame.
+    const bool hasFocus = puglHasFocus(mView);
     ImGuiIO& io = ImGui::GetIO();
+    if (hasFocus != std::exchange(mHasFocus, hasFocus))
+        io.AddFocusEvent(hasFocus);
     io.DisplaySize = ImVec2(size.width, size.height);
     io.DeltaTime = static_cast<float>(std::max(now - mLastFrameTime, kMinFrameTime));
     mLastFrameTime = now;
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui::NewFrame();
-    mDrawContents();
+    mDrawContents(hasFocus);
     ImGui::Render();
 
     glViewport(0, 0, size.width, size.height);

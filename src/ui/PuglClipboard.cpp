@@ -1,5 +1,7 @@
 #include "PuglClipboard.h"
 
+#include "PuglImGuiInput.h"
+
 #include <imgui.h>
 
 #include <climits>
@@ -14,7 +16,7 @@ constexpr char kTextType[] = "text/plain";
 PuglClipboard& clipboardOf(ImGuiContext*) { return *static_cast<PuglClipboard*>(ImGui::GetPlatformIO().Platform_ClipboardUserData); }
 
 bool isPasteShortcut(const PuglKeyEvent& key) {
-    const bool ctrlV = (key.state & PUGL_MOD_CTRL) && key.key == 'v';
+    const bool ctrlV = (key.state & PUGL_MOD_CTRL) && unshiftedKey(key) == 'v';
     const bool shiftInsert = (key.state & PUGL_MOD_SHIFT) && key.key == PUGL_KEY_INSERT;
     return ctrlV || shiftInsert;
 }

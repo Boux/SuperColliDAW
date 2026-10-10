@@ -27,7 +27,7 @@ public:
     void setFixedFonts(const FixedFonts& fonts);
     void showCompletion(const Completion& completion) { mCompletion.show(completion); }
     void showSignatureHelp(const SignatureHelp& help) { mSignatureHint.show(help); }
-    void draw();
+    void draw(bool hasFocus);
 
 private:
     void drawToolbar();

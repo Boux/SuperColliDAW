@@ -114,7 +114,7 @@ bool PluginGui::setScale(double scale) {
 }
 
 bool PluginGui::setParent(const clap_window* window) {
-    mWindow = std::make_unique<EditorWindow>(nativeParent(*window), mWidth, mHeight, mHostScale.value_or(1.0), [this] { mView.draw(); });
+    mWindow = std::make_unique<EditorWindow>(nativeParent(*window), mWidth, mHeight, mHostScale.value_or(1.0), [this](bool hasFocus) { mView.draw(hasFocus); });
     if (!mWindow->isRealized()) {
         mWindow.reset();
         return false;

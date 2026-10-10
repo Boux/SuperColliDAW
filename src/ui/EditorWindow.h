@@ -21,7 +21,7 @@ struct BundledFont;
 
 class EditorWindow {
 public:
-    using DrawContents = std::function<void()>;
+    using DrawContents = std::function<void(bool hasFocus)>;
 
     EditorWindow(PuglNativeView parent, uint32_t width, uint32_t height, double scale, DrawContents drawContents);
     ~EditorWindow();
@@ -54,6 +54,7 @@ private:
     void applyStyle();
 
     void useSystemKeyRepeat(ImGuiIO& io);
+    void takeFocusOnActivation();
     PuglStatus handle(const PuglEvent& event);
     PuglStatus startRenderer();
     PuglStatus stopRenderer();
@@ -71,6 +72,9 @@ private:
     EditorSettings mSettings;
     bool mStyleOutdated = true;
     bool mRealized = false;
+    // ImGui starts out assuming the window has focus.
+    bool mHasFocus = true;
+    PuglNativeView mActiveWindow = 0;
     PuglCursor mCursor = PUGL_CURSOR_ARROW;
     double mLastFrameTime = 0.0;
 };
