@@ -14,7 +14,7 @@ target_link_libraries(scsynth_embedded PUBLIC rt)
 target_sources(supercollidaw_engine PRIVATE src/engine/InstalledSuperCollider_linux.cpp)
 target_sources(supercollidaw_lang PRIVATE src/lang/SclangProcess_linux.cpp src/lang/StdinWriter_posix.cpp)
 target_sources(supercollidaw_ui PRIVATE src/ui/EditorWindow_linux.cpp)
-target_sources(supercollidaw_clap PRIVATE src/plugin/PluginGui_linux.cpp src/plugin/PluginPaths_linux.cpp)
+target_sources(supercollidaw_clap PRIVATE src/plugin/PluginGui_linux.cpp src/plugin/PluginPaths_linux.cpp src/plugin/reaper/ReaperTextField_linux.cpp)
 target_link_options(supercollidaw_clap PRIVATE -Wl,--no-undefined -Wl,--exclude-libs,ALL)
 
 get_target_property(PLUGIN_BINARY_DIR supercollidaw_clap BINARY_DIR)

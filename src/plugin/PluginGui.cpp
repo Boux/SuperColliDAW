@@ -75,6 +75,7 @@ bool PluginGui::create() {
 
 void PluginGui::destroy() {
     unregisterEventFd();
+    mReaperTextField.reset();
     mWindow.reset();
     if (mFrameTimer == CLAP_INVALID_ID)
         return;
@@ -124,6 +125,7 @@ bool PluginGui::setParent(const clap_window* window) {
         mWindow->setScale(mWindow->systemScale());
     mWindow->setSettings(mView.settings());
     mView.setFixedFonts(mWindow->fixedFonts());
+    mReaperTextField.emplace(mHost, mWindow->nativeView());
     registerEventFd();
     return true;
 }

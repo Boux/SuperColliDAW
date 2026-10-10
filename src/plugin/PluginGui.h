@@ -1,5 +1,6 @@
 #pragma once
 
+#include "reaper/ReaperTextField.h"
 #include "ui/EditorView.h"
 #include "ui/EditorWindow.h"
 
@@ -60,6 +61,7 @@ private:
     std::optional<double> mHostScale;
     EditorView mView;
     std::unique_ptr<EditorWindow> mWindow;
+    std::optional<ReaperTextField> mReaperTextField;
 };
 
 }

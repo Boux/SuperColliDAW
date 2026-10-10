@@ -29,6 +29,7 @@ public:
     EditorWindow& operator=(const EditorWindow&) = delete;
 
     bool isRealized() const { return mRealized; }
+    PuglNativeView nativeView() const { return puglGetNativeView(mView); }
     void setSize(uint32_t width, uint32_t height);
     void setScale(double scale);
     double systemScale() const;
