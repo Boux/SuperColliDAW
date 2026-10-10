@@ -4,6 +4,8 @@ enable_language(OBJC OBJCXX)
 
 target_sources(ui_pugl PRIVATE ${PUGL_DIR}/src/mac.m ${PUGL_DIR}/src/mac_gl.m)
 target_compile_definitions(ui_pugl PUBLIC GL_SILENCE_DEPRECATION)
+# Objective-C class names are global in the host process, so pugl's must not clash with another plugin's copy of pugl.
+target_compile_definitions(ui_pugl PRIVATE PuglOpenGLView=SuperColliDAWOpenGLView PuglWindow=SuperColliDAWWindow PuglWindowDelegate=SuperColliDAWWindowDelegate PuglWrapperView=SuperColliDAWWrapperView)
 target_link_libraries(ui_pugl PUBLIC "-framework Cocoa" "-framework CoreVideo")
 
 set_property(SOURCE ${SC_ROOT}/common/SC_Filesystem_macos.cpp PROPERTY COMPILE_OPTIONS -xobjective-c++)
@@ -26,6 +28,7 @@ set_target_properties(supercollidaw_clap PROPERTIES
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
 )
+target_link_options(supercollidaw_clap PRIVATE -Wl,-exported_symbol,_clap_entry)
 
 get_target_property(PLUGIN_BINARY_DIR supercollidaw_clap BINARY_DIR)
 bundle_ugens(supercollidaw_clap ${PLUGIN_BINARY_DIR}/SuperColliDAW/plugins .scx BUNDLED_UGENS)
