@@ -1,0 +1,106 @@
+diff --git a/TextEditor.cpp b/TextEditor.cpp
+index 49b86c0..83a531b 100644
+--- a/TextEditor.cpp
++++ b/TextEditor.cpp
+@@ -2785,43 +2785,76 @@ void TextEditor::toggleComments() {
+ 	const auto transaction = startTransaction();
+ 	const auto comment = config.language->singleLineComment;
+ 
++	// a blank line has nothing but whitespace, so this returns its size
++	auto firstNonWhiteSpace = [this](size_t line) {
++		size_t index = 0;
++
++		while (index < document[line].size() && CodePoint::isWhiteSpace(document[line][index].codepoint)) {
++			index++;
++		}
++
++		return index;
++	};
++
++	auto startsWithComment = [this, &comment](size_t line, size_t start) {
++		size_t i = 0;
++
++		while (start + i < document[line].size() && i < comment.size() && document[line][start + i].codepoint == static_cast<ImWchar>(comment[i])) {
++			i++;
++		}
++
++		return i == comment.size();
++	};
++
+ 	// process all cursors
+ 	for (auto cursor = cursors.begin(); cursor < cursors.end(); cursor++) {
+ 		const auto cursorStart = cursor->getSelectionStart();
+ 		const auto cursorEnd = cursor->getSelectionEnd();
+ 
+-		// process all lines in this cursor
+-		for (auto line = cursorStart.line; line <= cursorEnd.line; line++) {
+-			if ((!cursor->hasSelection() || DocPos(line, 0) != cursorEnd) && document[line].size()) {
+-				// see if line starts with a comment (after possible leading whitespaces)
+-				size_t start = 0;
+-				size_t i = 0;
++		// a selection that ends at the start of a line leaves that line out
++		auto lastLine = cursorEnd.line;
+ 
+-				while (start < document[line].size() && CodePoint::isWhiteSpace(document[line][start].codepoint)) {
+-					start++;
+-				}
++		if (cursor->hasSelection() && cursorEnd.line > cursorStart.line && cursorEnd.index == 0) {
++			lastLine--;
++		}
+ 
+-				while (start + i < document[line].size() && i < comment.size() && document[line][start + i].codepoint == static_cast<ImWchar>(comment[i])) {
+-					i++;
+-				}
++		// uncomment the lines only if all of them are comments, otherwise comment all of them at their smallest indent
++		auto indent = std::numeric_limits<size_t>::max();
++		auto allComments = true;
+ 
+-				if (i == comment.size()) {
+-					const auto deleteStart = DocPos(line, start);
+-					auto endOfComment = start + i;
++		for (auto line = cursorStart.line; line <= lastLine; line++) {
++			const auto start = firstNonWhiteSpace(line);
+ 
+-					if (endOfComment < document[line].size() - 1 && document[line][endOfComment].codepoint == ' ') {
+-						endOfComment++;
+-					}
++			if (start < document[line].size()) {
++				indent = std::min(indent, start);
++				allComments = allComments && startsWithComment(line, start);
++			}
++		}
+ 
+-					const auto deleteEnd = DocPos(line, endOfComment);
+-					deleteText(transaction, deleteStart, deleteEnd);
+-					cursors.adjustForDelete(cursor, deleteStart, deleteEnd, true);
++		// skip blank lines
++		for (auto line = cursorStart.line; line <= lastLine; line++) {
++			const auto start = firstNonWhiteSpace(line);
+ 
+-				} else {
+-					const auto insertStart = DocPos(line, start);
+-					const auto insertEnd = insertText(transaction, insertStart, comment + " ");
+-					cursors.adjustForInsert(cursor, insertStart, insertEnd, true);
++			if (start == document[line].size()) {
++				continue;
++			}
++
++			if (allComments) {
++				const auto deleteStart = DocPos(line, start);
++				auto endOfComment = start + comment.size();
++
++				if (endOfComment < document[line].size() - 1 && document[line][endOfComment].codepoint == ' ') {
++					endOfComment++;
+ 				}
++
++				const auto deleteEnd = DocPos(line, endOfComment);
++				deleteText(transaction, deleteStart, deleteEnd);
++				cursors.adjustForDelete(cursor, deleteStart, deleteEnd, true);
++
++			} else {
++				const auto insertStart = DocPos(line, indent);
++				const auto insertEnd = insertText(transaction, insertStart, comment + " ");
++				cursors.adjustForInsert(cursor, insertStart, insertEnd, true);
+ 			}
+ 		}
+ 	}
