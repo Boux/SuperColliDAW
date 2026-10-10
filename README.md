@@ -8,13 +8,13 @@ This is a very early BETA version, I have not tested mac OS, I don't have a mac 
 
 ## Install
 
-1. Install [SuperCollider 3.14](https://supercollider.github.io/downloads). On a Mac, put it in your Applications folder.
-2. Download SuperColliDAW for your computer from the [Releases page](https://github.com/Boux/SuperColliDAW/releases).
+1. Install [SuperCollider 3.14](https://supercollider.github.io/downloads) if you haven't yet. On a Mac, put it in your Applications folder.
+2. Download SuperColliDAW for your OS from the [Releases page](https://github.com/Boux/SuperColliDAW/releases).
 3. Unzip it. You get a file called `SuperColliDAW.clap` and a folder called `SuperColliDAW`. Keep these two together.
 4. Move both into your CLAP plugin folder. Create the folder if it doesn't exist.
    - **Windows:** `C:\Program Files\Common Files\CLAP`
-   - **Mac:** in Finder, press Cmd+Shift+G and go to `~/Library/Audio/Plug-Ins`, then open (or create) the `CLAP` folder there.
-   - **Linux:** a folder called `.clap` in your home folder. Press Ctrl+H in your file manager to see it.
+   - **Mac:** `~/Library/Audio/Plug-Ins/CLAP`
+   - **Linux:** `~/.clap`
 5. **Mac only:** macOS blocks plugins downloaded from the internet. To allow it, open the Terminal app, paste this line and press Enter:
    ```
    xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/CLAP/SuperColliDAW*
